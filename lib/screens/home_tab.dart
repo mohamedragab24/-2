@@ -1,0 +1,116 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
+import '../services/firestore_service.dart';
+import '../models/course.dart';
+import '../widgets/course_card.dart';
+import '../theme/app_theme.dart';
+
+class HomeTab extends StatelessWidget {
+  const HomeTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final firestore = FirestoreService();
+
+    return SafeArea(
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 23,
+                    backgroundColor: AppColors.emerald,
+                    child: Text((user?.displayName?.isNotEmpty == true ? user!.displayName![0] : 'م'),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('مرحبًا 👋', style: TextStyle(color: AppColors.muted, fontSize: 12.5)),
+                        Text(user?.displayName ?? 'طالب مسار',
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                      ],
+                    ),
+                  ),
+                  IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none)),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 20),
+              child: Text('كورساتي', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: 16.5)),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: StreamBuilder<List<String>>(
+              stream: user == null ? const Stream.empty() : firestore.watchMyCourseIds(user.uid),
+              builder: (context, snap) {
+                final ids = snap.data ?? [];
+                if (ids.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 18),
+                    child: Text('لسه مشتريتش أي كورس', style: TextStyle(color: AppColors.muted, fontSize: 13)),
+                  );
+                }
+                return SizedBox(
+                  height: 190,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    itemCount: ids.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, i) => FutureBuilder<Course?>(
+                      future: firestore.getCourse(ids[i]),
+                      builder: (context, courseSnap) {
+                        final c = courseSnap.data;
+                        if (c == null) return const SizedBox(width: 210);
+                        return SizedBox(
+                          width: 210,
+                          child: CourseCard(course: c, onTap: () => context.push('/course/${c.id}')),
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 26, 18, 14),
+              child: Text('جديدنا', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: 16.5)),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            sliver: StreamBuilder<List<Course>>(
+              stream: firestore.watchCourses(),
+              builder: (context, snap) {
+                final courses = snap.data ?? [];
+                return SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2, mainAxisSpacing: 14, crossAxisSpacing: 14, childAspectRatio: .72,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, i) => CourseCard(course: courses[i], onTap: () => context.push('/course/${courses[i].id}')),
+                    childCount: courses.length,
+                  ),
+                );
+              },
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 30)),
+        ],
+      ),
+    );
+  }
+}

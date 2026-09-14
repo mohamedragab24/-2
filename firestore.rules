@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Course + lesson metadata (title, price, thumbnail, storagePath) is
+    // readable by anyone so the catalog and course-detail pages work
+    // before login. storagePath being readable is fine — it's useless
+    // without a signed URL, which only the Cloud Function can mint.
+    match /courses/{courseId} {
+      allow read: if true;
+      allow write: if false; // only the admin dashboard (via Admin SDK) writes courses
+
+      match /lessons/{lessonId} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    // A user can only read their own purchase records, and can never
+    // write them directly — purchases are created only by the
+    // onPaymentCompleted Cloud Function after a real payment.
+    match /purchases/{purchaseId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow write: if false;
+    }
+
+    // Payments are written by your payment webhook (Admin SDK / a
+    // trusted server), never directly by the app.
+    match /payments/{paymentId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow write: if false;
+    }
+
+    // Progress: a user can only read/write their own watch progress.
+    match /progress/{progressId} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == request.resource.data.uid;
+    }
+
+    // Sessions: written only by the Cloud Function, never by the client.
+    match /sessions/{sessionId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    match /notifications/{notifId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow write: if false;
+    }
+
+    match /users/{userId} {
+      allow read, update: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
+    }
+  }
+}
