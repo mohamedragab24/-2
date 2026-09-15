@@ -4,12 +4,10 @@ class Lesson {
   final String title;
   final int order;
   final int durationSeconds;
-  final bool isPreview; // true = playable without purchase (e.g. lesson 1 intro)
-  /// Path inside Cloud Storage, e.g. "courses/c1/lessons/l3.mp4".
-  /// This is NEVER a public URL — the app never reads this field directly
-  /// for playback; it only sends the lessonId to the getSignedVideoUrl
-  /// Cloud Function, which resolves this path server-side after checking
-  /// purchase + auth, and returns a short-lived signed URL.
+  final bool isPreview;
+
+  /// مسار الفيديو داخل Firebase Storage.
+  /// ليس رابط فيديو مباشر.
   final String storagePath;
 
   Lesson({
@@ -22,21 +20,54 @@ class Lesson {
     required this.storagePath,
   });
 
-  factory Lesson.fromMap(String id, String courseId, Map<String, dynamic> map) {
+  static int _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static bool _toBool(dynamic value) {
+    if (value is bool) return value;
+
+    final text = value?.toString().toLowerCase();
+
+    return text == 'true' || text == '1';
+  }
+
+  factory Lesson.fromMap(
+    String id,
+    String courseId,
+    Map<String, dynamic> map,
+  ) {
+    final durationSeconds = map['durationSeconds'] != null
+        ? _toInt(map['durationSeconds'])
+        : _toInt(map['durationMinutes']) * 60;
+
+    final isPreview = map['isPreview'] != null
+        ? _toBool(map['isPreview'])
+        : _toBool(map['isFreePreview']);
+
     return Lesson(
       id: id,
       courseId: courseId,
-      title: map['title'] ?? '',
-      order: (map['order'] ?? 0) as int,
-      durationSeconds: (map['durationSeconds'] ?? 0) as int,
-      isPreview: map['isPreview'] ?? false,
-      storagePath: map['storagePath'] ?? '',
+
+      title: (map['title'] ?? map['name'] ?? '').toString(),
+
+      order: _toInt(map['order']),
+
+      durationSeconds: durationSeconds,
+
+      isPreview: isPreview,
+
+      // الموقع الجديد يخزن storagePath
+      storagePath: (map['storagePath'] ?? '').toString(),
     );
   }
 
   String get durationLabel {
-    final m = durationSeconds ~/ 60;
-    final s = durationSeconds % 60;
-    return '$m:${s.toString().padLeft(2, '0')}';
+    final minutes = durationSeconds ~/ 60;
+    final seconds = durationSeconds % 60;
+
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }

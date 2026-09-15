@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+
 import 'home_tab.dart';
 import 'courses_tab.dart';
+import 'my_courses_tab.dart';
+import 'favorites_tab.dart';
+import 'notifications_tab.dart';
 import 'account_tab.dart';
 import '../theme/app_theme.dart';
 
@@ -14,54 +18,71 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  final _tabs = const [
+  final List<Widget> _tabs = const [
     HomeTab(),
     CoursesTab(),
-    _PlaceholderTab(title: 'المفضلة', icon: Icons.favorite_border, message: 'لا يوجد كورسات في المفضلة بعد'),
-    _PlaceholderTab(title: 'الإشعارات', icon: Icons.notifications_none, message: 'لا يوجد إشعارات جديدة'),
+    MyCoursesTab(),
+    FavoritesTab(),
+    NotificationsTab(),
     AccountTab(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _index, children: _tabs),
+      body: IndexedStack(
+        index: _index,
+        children: _tabs,
+      ),
+
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (index) {
+          setState(() {
+            _index = index;
+          });
+        },
+
         backgroundColor: AppColors.white,
         indicatorColor: AppColors.emeraldLight,
+
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'الرئيسية'),
-          NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: 'الكورسات'),
-          NavigationDestination(icon: Icon(Icons.favorite_border), selectedIcon: Icon(Icons.favorite), label: 'المفضلة'),
-          NavigationDestination(icon: Icon(Icons.notifications_none), selectedIcon: Icon(Icons.notifications), label: 'الإشعارات'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'حسابي'),
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'الرئيسية',
+          ),
+
+          NavigationDestination(
+            icon: Icon(Icons.menu_book_outlined),
+            selectedIcon: Icon(Icons.menu_book),
+            label: 'الكورسات',
+          ),
+
+          NavigationDestination(
+            icon: Icon(Icons.school_outlined),
+            selectedIcon: Icon(Icons.school),
+            label: 'كورساتي',
+          ),
+
+          NavigationDestination(
+            icon: Icon(Icons.favorite_border),
+            selectedIcon: Icon(Icons.favorite),
+            label: 'المفضلة',
+          ),
+
+          NavigationDestination(
+            icon: Icon(Icons.notifications_none),
+            selectedIcon: Icon(Icons.notifications),
+            label: 'الإشعارات',
+          ),
+
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'حسابي',
+          ),
         ],
-      ),
-    );
-  }
-}
-
-class _PlaceholderTab extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final String message;
-  const _PlaceholderTab({required this.title, required this.icon, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 40, color: AppColors.muted),
-            const SizedBox(height: 12),
-            Text(message, style: const TextStyle(color: AppColors.muted)),
-          ],
-        ),
       ),
     );
   }

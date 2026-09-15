@@ -120,3 +120,12 @@ functions/index.js          Cloud Function الحماية الفعلية
 firestore.rules             قواعد أمان Firestore
 storage.rules                قواعد أمان Storage
 ```
+
+## نظام تحديث التطبيق
+
+تم توحيد GitHub Actions في Workflow واحد فقط: `.github/workflows/build-apk.yml`.
+كل Build على `main` ينشئ APK برقم `versionCode` مساوي لرقم تشغيل GitHub Actions، ثم ينشئ GitHub Release ويرفع `app-release.apk`.
+
+التطبيق يفحص أحدث Release عند التشغيل على Android، وإذا وجد نسخة أحدث يظهر زر **تحديث الآن** لتحميل الـAPK.
+
+> قبل النشر العام، استخدم keystore إنتاجي ثابت في GitHub Secrets ووقّع كل الإصدارات بنفس المفتاح، وإلا قد لا يسمح Android بتثبيت التحديث فوق النسخة القديمة.

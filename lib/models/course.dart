@@ -27,23 +27,57 @@ class Course {
     required this.features,
   });
 
-  /// Builds a Course from a Firestore `courses/{courseId}` document.
-  /// Matches the collection referenced in the project's data model:
-  /// Courses, Lessons, Purchases, Progress, Payments, Sessions, Notifications.
+  static int _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static double _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
   factory Course.fromMap(String id, Map<String, dynamic> map) {
+    final rawFeatures = map['features'];
+
+    final features = rawFeatures is List
+        ? rawFeatures.map((e) => e.toString()).toList()
+        : <String>[];
+
     return Course(
       id: id,
-      title: map['title'] ?? '',
-      description: map['description'] ?? '',
-      instructorName: map['instructorName'] ?? '',
-      category: map['category'] ?? '',
-      thumbnailUrl: map['thumbnailUrl'] ?? '',
-      price: (map['price'] ?? 0).toDouble(),
-      rating: (map['rating'] ?? 0).toDouble(),
-      studentsCount: (map['studentsCount'] ?? 0) as int,
-      lessonsCount: (map['lessonsCount'] ?? 0) as int,
-      durationLabel: map['durationLabel'] ?? '',
-      features: List<String>.from(map['features'] ?? const []),
+      title: (map['title'] ?? map['name'] ?? '').toString(),
+      description: (map['description'] ?? '').toString(),
+
+      instructorName:
+          (map['instructorName'] ?? map['instructor'] ?? '').toString(),
+
+      category: (map['category'] ?? '').toString(),
+
+      // يدعم بيانات الموقع الحالية
+      thumbnailUrl:
+          (map['thumbnailUrl'] ?? map['coverUrl'] ?? '').toString(),
+
+      price: _toDouble(map['price']),
+      rating: _toDouble(map['rating']),
+
+      // الموقع يستخدم totalEnrollments
+      studentsCount:
+          _toInt(map['studentsCount'] ?? map['totalEnrollments']),
+
+      // يدعم lessonsCount أو يحسب العدد من lessons
+      lessonsCount: _toInt(
+        map['lessonsCount'] ??
+            (map['lessons'] is List
+                ? (map['lessons'] as List).length
+                : 0),
+      ),
+
+      durationLabel:
+          (map['durationLabel'] ?? map['duration'] ?? '').toString(),
+
+      features: features,
     );
   }
 }

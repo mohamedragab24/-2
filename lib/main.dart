@@ -6,6 +6,7 @@ import 'app_router.dart';
 import 'theme/app_theme.dart';
 import 'services/deep_link_service.dart';
 import 'services/screen_protection_service.dart';
+import 'services/app_update_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +31,9 @@ class _MasarAppState extends State<MasarApp> {
   late final router = buildRouter();
   final deepLinkService = DeepLinkService();
   final screenProtection = ScreenProtectionService();
+  final appUpdateService = AppUpdateService();
   bool _blockContent = false;
+  bool _updateDialogShown = false;
 
   @override
   void initState() {
@@ -40,9 +43,47 @@ class _MasarAppState extends State<MasarApp> {
     // Android's FLAG_SECURE from this point on; on iOS this starts the
     // recording/screenshot listener that drives the overlay below.
     screenProtection.init();
+    _checkForUpdate();
     screenProtection.shouldBlockContent.listen((block) {
       if (mounted) setState(() => _blockContent = block);
     });
+  }
+
+  Future<void> _checkForUpdate() async {
+    // Give Firebase/router time to finish starting before showing a dialog.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (!mounted || _updateDialogShown) return;
+
+    final update = await appUpdateService.checkForAndroidUpdate();
+    if (!mounted || update == null || _updateDialogShown) return;
+
+    _updateDialogShown = true;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.paper,
+        title: const Text('تحديث جديد متاح'),
+        content: Text(
+          'يوجد إصدار جديد من التطبيق (${update.versionName}).\n'
+          'اضغط «تحديث الآن» لتحميل أحدث نسخة.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('لاحقًا'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await appUpdateService.openUpdate(update);
+            },
+            icon: const Icon(Icons.system_update),
+            label: const Text('تحديث الآن'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
