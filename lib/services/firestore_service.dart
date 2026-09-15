@@ -12,7 +12,7 @@ class FirestoreService {
   Stream<List<Course>> watchCourses({String? category}) {
     Query<Map<String, dynamic>> query = _db
         .collection('courses')
-        .where('isPublished', isEqualTo: true);
+        .where('status', isEqualTo: 'published');
 
     if (category != null && category != 'الكل') {
       query = query.where('category', isEqualTo: category);

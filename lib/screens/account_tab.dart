@@ -53,7 +53,15 @@ class AccountTab extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_left),
                 onTap: () {},
               ),
-              const Divider(height: 1),
+              if (profile?.role == 'admin') ...[
+                ListTile(
+                  leading: const Icon(Icons.admin_panel_settings_outlined, color: AppColors.gold),
+                  title: const Text('لوحة الأدمن — مراجعة الكورسات'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => context.push('/admin'),
+                ),
+                const Divider(height: 1),
+              ],
               ListTile(
                 leading: const Icon(Icons.settings_outlined),
                 title: const Text('الإعدادات'),

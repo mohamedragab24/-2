@@ -4,6 +4,7 @@ class UserProfile {
   final String email;
   final String phone;
   final DateTime? joinedAt;
+  final String role;
 
   UserProfile({
     required this.uid,
@@ -11,6 +12,7 @@ class UserProfile {
     required this.email,
     required this.phone,
     this.joinedAt,
+    this.role = 'student',
   });
 
   factory UserProfile.fromMap(String uid, Map<String, dynamic> map) {
@@ -20,6 +22,7 @@ class UserProfile {
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
       joinedAt: map['joinedAt']?.toDate(),
+      role: (map['role'] ?? 'student').toString(),
     );
   }
 

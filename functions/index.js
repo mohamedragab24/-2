@@ -91,3 +91,82 @@ exports.onPaymentCompleted = onDocumentCreated("payments/{paymentId}", async (ev
     paymentId: event.params.paymentId,
   });
 });
+
+/**
+ * Admin-only course review. The admin may approve or reject a pending course.
+ * Rejection requires a non-empty reason. Every decision is appended to the
+ * course's reviews subcollection for an audit trail.
+ */
+exports.reviewCourse = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "لازم تسجل الدخول أولاً");
+
+  const profile = await db.collection("users").doc(uid).get();
+  const isAdmin = request.auth.token?.admin === true || profile.data()?.role === "admin";
+  if (!isAdmin) throw new HttpsError("permission-denied", "ليس لديك صلاحية الأدمن");
+
+  const data = request.data || {};
+  const courseId = String(data.courseId || "").trim();
+  const decision = String(data.decision || "").trim();
+  const rejectionReason = String(data.rejectionReason || "").trim();
+  if (!courseId || !["approved", "rejected"].includes(decision)) {
+    throw new HttpsError("invalid-argument", "بيانات المراجعة غير صحيحة");
+  }
+  if (decision === "rejected" && !rejectionReason) {
+    throw new HttpsError("invalid-argument", "سبب الرفض مطلوب");
+  }
+
+  const courseRef = db.collection("courses").doc(courseId);
+  const courseSnap = await courseRef.get();
+  if (!courseSnap.exists) throw new HttpsError("not-found", "الكورس غير موجود");
+  const course = courseSnap.data() || {};
+  if (course.status && course.status !== "pending") {
+    throw new HttpsError("failed-precondition", "الكورس ليس قيد المراجعة حاليًا");
+  }
+
+  const reviewerName = request.auth.token?.name || profile.data()?.name || request.auth.token?.email || uid;
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const reviewRef = courseRef.collection("reviews").doc();
+
+  const update = decision === "approved"
+    ? {
+        status: "published",
+        isPublished: true,
+        rejectionReason: admin.firestore.FieldValue.delete(),
+        reviewedAt: now,
+        reviewedBy: uid,
+      }
+    : {
+        status: "rejected",
+        isPublished: false,
+        rejectionReason,
+        reviewedAt: now,
+        reviewedBy: uid,
+      };
+
+  const batch = db.batch();
+  batch.update(courseRef, update);
+  batch.set(reviewRef, {
+    reviewerUid: uid,
+    reviewerName,
+    decision,
+    rejectionReason: decision === "rejected" ? rejectionReason : null,
+    reviewedAt: now,
+  });
+  await batch.commit();
+
+  // Notify the course owner when available.
+  const ownerUid = course.ownerUid || course.instructorUid || course.createdBy;
+  if (ownerUid) {
+    await db.collection("users").doc(String(ownerUid)).collection("notifications").add({
+      type: "course_review",
+      courseId,
+      decision,
+      rejectionReason: decision === "rejected" ? rejectionReason : null,
+      createdAt: now,
+      read: false,
+    });
+  }
+
+  return { ok: true, status: update.status };
+});

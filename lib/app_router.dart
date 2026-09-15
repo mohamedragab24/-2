@@ -8,6 +8,7 @@ import 'screens/forgot_password_screen.dart';
 import 'screens/home_shell.dart';
 import 'screens/course_detail_screen.dart';
 import 'screens/lesson_player_screen.dart';
+import 'screens/admin_dashboard_screen.dart';
 
 GoRouter buildRouter() {
   return GoRouter(
@@ -30,6 +31,7 @@ GoRouter buildRouter() {
         path: '/course/:courseId',
         builder: (context, state) => CourseDetailScreen(courseId: state.pathParameters['courseId']!),
       ),
+      GoRoute(path: '/admin', builder: (context, state) => const AdminDashboardScreen()),
       GoRoute(
         path: '/course/:courseId/lesson/:lessonId',
         builder: (context, state) => LessonPlayerScreen(
