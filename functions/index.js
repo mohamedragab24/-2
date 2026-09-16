@@ -93,6 +93,35 @@ exports.onPaymentCompleted = onDocumentCreated("payments/{paymentId}", async (ev
 });
 
 /**
+ * Allows a normal user to switch only between the learner and instructor roles.
+ * Admin status can never be granted through this client-callable function.
+ */
+exports.switchLearningRole = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'لازم تسجل الدخول أولاً');
+
+  const targetRole = String(request.data?.targetRole || '').trim();
+  if (!['student', 'instructor'].includes(targetRole)) {
+    throw new HttpsError('invalid-argument', 'نوع الحساب غير صحيح');
+  }
+
+  const userRef = db.collection('users').doc(uid);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) throw new HttpsError('not-found', 'ملف المستخدم غير موجود');
+
+  const currentRole = String(userSnap.data()?.role || 'student');
+  if (currentRole === 'admin') {
+    throw new HttpsError('permission-denied', 'حساب الأدمن لا يمكن تغييره من هنا');
+  }
+  if (!['student', 'instructor'].includes(currentRole)) {
+    throw new HttpsError('failed-precondition', 'نوع الحساب الحالي غير مدعوم');
+  }
+
+  await userRef.update({ role: targetRole });
+  return { ok: true, role: targetRole };
+});
+
+/**
  * Admin-only course review. The admin may approve or reject a pending course.
  * Rejection requires a non-empty reason. Every decision is appended to the
  * course's reviews subcollection for an audit trail.

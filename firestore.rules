@@ -50,7 +50,11 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, update: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Profile updates are allowed, but role changes are server-only.
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role;
       allow create: if request.auth != null && request.auth.uid == userId;
       allow delete: if false;
     }

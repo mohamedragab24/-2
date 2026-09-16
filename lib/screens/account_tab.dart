@@ -3,11 +3,45 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/role_service.dart';
 import '../models/user_profile.dart';
 import '../theme/app_theme.dart';
 
 class AccountTab extends StatelessWidget {
   const AccountTab({super.key});
+
+  Future<void> _switchLearningRole(BuildContext context, String currentRole) async {
+    final targetRole = currentRole == 'instructor' ? 'student' : 'instructor';
+    final targetLabel = targetRole == 'instructor' ? 'مُفهّم' : 'مستفهم';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('تغيير نوع الحساب'),
+        content: Text('هل تريد التبديل إلى $targetLabel؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('تأكيد')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await RoleService().switchLearningRole(targetRole);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم التبديل إلى $targetLabel بنجاح')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر تغيير نوع الحساب حاليًا')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,9 +90,28 @@ class AccountTab extends StatelessWidget {
               if (profile?.role == 'admin') ...[
                 ListTile(
                   leading: const Icon(Icons.admin_panel_settings_outlined, color: AppColors.gold),
-                  title: const Text('لوحة الأدمن — مراجعة الكورسات'),
+                  title: const Text('لوحة التحكم — الأدمن'),
+                  subtitle: const Text('مراجعة واعتماد الكورسات'),
                   trailing: const Icon(Icons.chevron_left),
                   onTap: () => context.push('/admin'),
+                ),
+                const Divider(height: 1),
+              ],
+              if (profile?.role == 'instructor' || profile?.role == 'student') ...[
+                ListTile(
+                  leading: Icon(
+                    profile?.role == 'instructor' ? Icons.school_outlined : Icons.psychology_outlined,
+                  ),
+                  title: Text(
+                    profile?.role == 'instructor' ? 'أنت الآن مُفهّم' : 'أنت الآن مستفهم',
+                  ),
+                  subtitle: Text(
+                    profile?.role == 'instructor'
+                        ? 'يمكنك التبديل إلى مستفهم'
+                        : 'يمكنك التبديل إلى مُفهّم',
+                  ),
+                  trailing: const Icon(Icons.swap_horiz),
+                  onTap: () => _switchLearningRole(context, profile!.role),
                 ),
                 const Divider(height: 1),
               ],

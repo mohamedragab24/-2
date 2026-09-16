@@ -7,3 +7,8 @@ The Account tab shows **لوحة الأدمن — مراجعة الكورسات*
 The callable Cloud Function `reviewCourse` is the trusted write path. It changes a pending course to `published` on approval or `rejected` on rejection, requires a rejection reason, appends an audit record under `courses/{courseId}/reviews`, and sends a notification to the course owner when `ownerUid`, `instructorUid`, or `createdBy` exists.
 
 For production, grant admin access using a trusted server/Admin SDK by setting the user's `role` field to `admin` and/or the Firebase Auth custom claim `admin: true`. Do not let normal users write their own role.
+
+
+## Learning-role switch
+
+The Account tab lets non-admin users switch between `student` (مستفهم) and `instructor` (مُفهّم). The switch is performed by the trusted `switchLearningRole` callable function; users cannot grant themselves `admin`.
