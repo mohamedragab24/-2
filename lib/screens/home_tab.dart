@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import '../services/firestore_service.dart';
+import '../models/user_profile.dart';
 import '../models/course.dart';
 import '../widgets/course_card.dart';
 import '../theme/app_theme.dart';
@@ -15,35 +16,45 @@ class HomeTab extends StatelessWidget {
     final firestore = FirestoreService();
 
     return SafeArea(
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 23,
-                    backgroundColor: AppColors.emerald,
-                    child: Text((user?.displayName?.isNotEmpty == true ? user!.displayName![0] : 'م'),
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      child: StreamBuilder<UserProfile?>(
+        stream: user == null ? const Stream.empty() : firestore.watchUserProfile(user.uid),
+        builder: (context, profileSnap) {
+          final profile = profileSnap.data;
+          final name = profile?.name.isNotEmpty == true
+              ? profile!.name
+              : (user?.displayName?.isNotEmpty == true ? user!.displayName! : 'طالب مسار');
+          final photoUrl = profile?.photoUrl ?? '';
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 23,
+                        backgroundColor: AppColors.emerald,
+                        backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+                        child: photoUrl.isEmpty
+                            ? Text(name.isNotEmpty ? name[0] : 'م',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700))
+                            : null,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('مرحبًا 👋', style: TextStyle(color: AppColors.muted, fontSize: 12.5)),
+                            Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                          ],
+                        ),
+                      ),
+                      IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none)),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('مرحبًا 👋', style: TextStyle(color: AppColors.muted, fontSize: 12.5)),
-                        Text(user?.displayName ?? 'طالب مسار',
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                      ],
-                    ),
-                  ),
-                  IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none)),
-                ],
+                ),
               ),
-            ),
-          ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(18, 10, 18, 20),
@@ -108,8 +119,10 @@ class HomeTab extends StatelessWidget {
               },
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 30)),
-        ],
+              const SliverToBoxAdapter(child: SizedBox(height: 30)),
+            ],
+          );
+        },
       ),
     );
   }

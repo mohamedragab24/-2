@@ -134,12 +134,64 @@ class FirestoreService {
         if (name != null && name.isNotEmpty) 'name': name,
         if (email != null && email.isNotEmpty) 'email': email,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
-        if (!existing.exists)
+        if (!existing.exists) ...{
           'joinedAt': FieldValue.serverTimestamp(),
+          'mode': 'mostafhem',
+        },
         'lastLoginAt': FieldValue.serverTimestamp(),
       },
       SetOptions(merge: true),
     );
+  }
+
+  Future<void> updateUserProfile({
+    required String uid,
+    String? name,
+    String? photoUrl,
+    String? mode,
+  }) async {
+    final data = <String, dynamic>{
+      if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+      if (photoUrl != null) 'photoUrl': photoUrl,
+      if (mode != null && (mode == 'mofahhem' || mode == 'mostafhem')) 'mode': mode,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    await _db.collection('users').doc(uid).set(data, SetOptions(merge: true));
+  }
+
+  Future<String> createPendingCourse({
+    required String uid,
+    required String instructorName,
+    required String title,
+    required String description,
+    required String category,
+    required double price,
+    String thumbnailUrl = '',
+  }) async {
+    final ref = await _db.collection('courses').add({
+      'title': title.trim(),
+      'description': description.trim(),
+      'instructorName': instructorName.trim(),
+      'instructorUid': uid,
+      'ownerUid': uid,
+      'createdBy': uid,
+      'category': category,
+      'price': price,
+      'rating': 0,
+      'studentsCount': 0,
+      'lessonsCount': 0,
+      'durationLabel': '',
+      'features': <String>[],
+      'thumbnailUrl': thumbnailUrl.trim(),
+      'status': 'pending',
+      'isPublished': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return ref.id;
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchMyCourses(String uid) {
+    return _db.collection('courses').where('ownerUid', isEqualTo: uid).snapshots();
   }
 
   // ==================== PURCHASES ====================

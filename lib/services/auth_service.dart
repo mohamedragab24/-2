@@ -60,6 +60,17 @@ class AuthService {
     );
   }
 
+  Future<void> updatePassword(String newPassword) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(code: 'no-current-user', message: 'يجب تسجيل الدخول أولاً');
+    }
+    if (newPassword.length < 6) {
+      throw FirebaseAuthException(code: 'weak-password', message: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+    }
+    await user.updatePassword(newPassword);
+  }
+
   Future<void> signOut() {
     return _auth.signOut();
   }

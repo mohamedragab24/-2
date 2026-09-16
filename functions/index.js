@@ -1,5 +1,5 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
@@ -70,6 +70,29 @@ exports.getSignedVideoUrl = onCall(async (request) => {
   return { url, expiresAtMs: Date.now() + SIGNED_URL_TTL_MS };
 });
 
+
+/**
+ * Keep the public instructor name on the owner's courses in sync with
+ * the profile name. This runs with Admin SDK so users cannot edit course
+ * metadata directly.
+ */
+exports.onUserProfileUpdated = onDocumentUpdated("users/{userId}", async (event) => {
+  const before = event.data?.before?.data() || {};
+  const after = event.data?.after?.data() || {};
+  if ((before.name || "") === (after.name || "")) return;
+
+  const courses = await db.collection("courses")
+    .where("ownerUid", "==", event.params.userId)
+    .get();
+
+  if (courses.empty) return;
+  const batch = db.batch();
+  for (const doc of courses.docs) {
+    batch.update(doc.ref, { instructorName: String(after.name || "") });
+  }
+  await batch.commit();
+});
+
 /**
  * Firestore trigger: whenever a payment document is marked completed,
  * automatically create/update the matching purchase document so the
@@ -90,35 +113,6 @@ exports.onPaymentCompleted = onDocumentCreated("payments/{paymentId}", async (ev
     purchasedAt: admin.firestore.FieldValue.serverTimestamp(),
     paymentId: event.params.paymentId,
   });
-});
-
-/**
- * Allows a normal user to switch only between the learner and instructor roles.
- * Admin status can never be granted through this client-callable function.
- */
-exports.switchLearningRole = onCall(async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError('unauthenticated', 'لازم تسجل الدخول أولاً');
-
-  const targetRole = String(request.data?.targetRole || '').trim();
-  if (!['student', 'instructor'].includes(targetRole)) {
-    throw new HttpsError('invalid-argument', 'نوع الحساب غير صحيح');
-  }
-
-  const userRef = db.collection('users').doc(uid);
-  const userSnap = await userRef.get();
-  if (!userSnap.exists) throw new HttpsError('not-found', 'ملف المستخدم غير موجود');
-
-  const currentRole = String(userSnap.data()?.role || 'student');
-  if (currentRole === 'admin') {
-    throw new HttpsError('permission-denied', 'حساب الأدمن لا يمكن تغييره من هنا');
-  }
-  if (!['student', 'instructor'].includes(currentRole)) {
-    throw new HttpsError('failed-precondition', 'نوع الحساب الحالي غير مدعوم');
-  }
-
-  await userRef.update({ role: targetRole });
-  return { ok: true, role: targetRole };
 });
 
 /**
