@@ -6,6 +6,7 @@ import '../services/firestore_service.dart';
 import '../models/course.dart';
 import '../models/lesson.dart';
 import '../theme/app_theme.dart';
+import '../widgets/r2_image.dart';
 
 class CourseDetailScreen extends StatefulWidget {
   final String courseId;
@@ -44,7 +45,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                     backgroundColor: AppColors.ink,
                     leading: IconButton(icon: const Icon(Icons.arrow_forward, color: Colors.white), onPressed: () => context.pop()),
                     flexibleSpace: FlexibleSpaceBar(
-                      background: CachedNetworkImage(imageUrl: course.thumbnailUrl, fit: BoxFit.cover),
+                      background: R2Image(source: course.thumbnailUrl, fit: BoxFit.cover),
                     ),
                   ),
                   SliverToBoxAdapter(

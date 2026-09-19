@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../widgets/r2_image.dart';
 
 import '../models/course.dart';
 import '../services/firestore_service.dart';
@@ -89,21 +90,7 @@ class MyCoursesTab extends StatelessWidget {
                                       size: 60,
                                     ),
                                   )
-                                : Image.network(
-                                    course.thumbnailUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (_, __, ___) {
-                                      return Container(
-                                        color: AppColors
-                                            .emeraldLight,
-                                        child: const Icon(
-                                          Icons.menu_book,
-                                          size: 60,
-                                        ),
-                                      );
-                                    },
-                                  ),
+                                : R2Image(source: course.thumbnailUrl, fit: BoxFit.cover, errorWidget: Container(color: AppColors.emeraldLight, child: const Icon(Icons.menu_book, size: 60))),
                           ),
                           Padding(
                             padding:
