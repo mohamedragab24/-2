@@ -24,3 +24,6 @@ in the execution environment, so the final APK build could not be executed here.
 
 ## Fix 2 - Flutter 3.24.5 / Jitsi
 - Changed `jitsi_meet_flutter_sdk` from `^13.1.1` to `^11.6.0` because the installed Flutter SDK is 3.24.5 and newer Jitsi SDK versions require Flutter >=3.38.0.
+
+
+v5 fixes: corrected Dart syntax in admin_control_center_screen.dart and meetings_tab.dart; removed unsupported minDate argument from showDatePicker for Flutter 3.24.5.
