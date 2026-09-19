@@ -7,6 +7,7 @@ class UserProfile {
   final DateTime? joinedAt;
   final String role;
   final String mode;
+  final bool isAdmin;
 
   UserProfile({
     required this.uid,
@@ -17,6 +18,7 @@ class UserProfile {
     this.joinedAt,
     this.role = 'student',
     this.mode = 'mostafhem',
+    this.isAdmin = false,
   });
 
   bool get isMofahhem => mode == 'mofahhem';
@@ -32,6 +34,7 @@ class UserProfile {
       joinedAt: map['joinedAt']?.toDate(),
       role: (map['role'] ?? 'student').toString(),
       mode: rawMode == 'mofahhem' ? 'mofahhem' : 'mostafhem',
+      isAdmin: map['isAdmin'] == true || (map['role'] ?? '').toString() == 'admin',
     );
   }
 

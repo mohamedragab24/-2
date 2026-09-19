@@ -28,12 +28,38 @@ class DeepLinkService {
   }
 
   void _handle(Uri uri, GoRouter router) {
-    // Matches /course/123 or /courses/123 regardless of host.
+    // دعم الروابط المخصصة: fahmny://course2-COURSE_ID
+    final host = uri.host;
+    final customCourseMatch = RegExp(r'^course(\d+)-(.+)$', caseSensitive: false).firstMatch(host);
+    if (customCourseMatch != null) {
+      final lessonNumber = int.tryParse(customCourseMatch.group(1)!) ?? 1;
+      final courseId = 'course-${customCourseMatch.group(2)!}';
+      router.go('/course/$courseId?lesson=$lessonNumber');
+      return;
+    }
+
     final segments = uri.pathSegments;
+    final meetingIdx = segments.indexWhere((s) => s == 'meeting' || s == 'meetings');
+    if (meetingIdx != -1 && meetingIdx + 1 < segments.length) {
+      router.push('/meeting/${segments[meetingIdx + 1]}');
+      return;
+    }
+
+    // دعم https://DOMAIN/courses/course2-COURSE_ID و https://DOMAIN/course2-COURSE_ID
+    for (final segment in segments) {
+      final match = RegExp(r'^course(\d+)-(.+)$', caseSensitive: false).firstMatch(segment);
+      if (match != null) {
+        final lessonNumber = int.tryParse(match.group(1)!) ?? 1;
+        final courseId = 'course-${match.group(2)!}';
+        router.go('/course/$courseId?lesson=$lessonNumber');
+        return;
+      }
+    }
+
     final idx = segments.indexWhere((s) => s == 'course' || s == 'courses');
     if (idx != -1 && idx + 1 < segments.length) {
       final courseId = segments[idx + 1];
-      router.push('/course/$courseId');
+      router.go('/course/$courseId');
     }
   }
 

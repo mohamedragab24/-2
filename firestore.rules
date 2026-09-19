@@ -70,3 +70,14 @@ service cloud.firestore {
     }
   }
 }
+
+// Mobile notifications, scheduled campaigns and meeting recordings
+match /users/{userId}/fcmTokens/{tokenId} {
+  allow read, write: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+}
+match /users/{userId}/notifications/{notificationId} {
+  allow read, update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+  allow create: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+}
+match /scheduledNotifications/{id} { allow read, write: if isAdmin(); }
+match /meetingRecordings/{id} { allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.ownerUid); allow write: if isAdmin(); }

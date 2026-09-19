@@ -7,9 +7,17 @@ import '../models/course.dart';
 import '../models/lesson.dart';
 import '../theme/app_theme.dart';
 
-class CourseDetailScreen extends StatelessWidget {
+class CourseDetailScreen extends StatefulWidget {
   final String courseId;
-  const CourseDetailScreen({super.key, required this.courseId});
+  final int initialLessonNumber;
+  const CourseDetailScreen({super.key, required this.courseId, this.initialLessonNumber = 1});
+
+  @override
+  State<CourseDetailScreen> createState() => _CourseDetailScreenState();
+}
+
+class _CourseDetailScreenState extends State<CourseDetailScreen> {
+  bool _openedInitialLesson = false;
 
   @override
   Widget build(BuildContext context) {
@@ -18,14 +26,14 @@ class CourseDetailScreen extends StatelessWidget {
 
     return Scaffold(
       body: FutureBuilder<Course?>(
-        future: firestore.getCourse(courseId),
+        future: firestore.getCourse(widget.courseId),
         builder: (context, courseSnap) {
           if (!courseSnap.hasData) return const Center(child: CircularProgressIndicator());
           final course = courseSnap.data;
           if (course == null) return const Center(child: Text('الكورس غير موجود'));
 
           return FutureBuilder<bool>(
-            future: uid == null ? Future.value(false) : firestore.hasPurchased(uid, courseId),
+            future: uid == null ? Future.value(false) : firestore.hasPurchased(uid, widget.courseId),
             builder: (context, purchasedSnap) {
               final purchased = purchasedSnap.data ?? false;
               return CustomScrollView(
@@ -69,9 +77,19 @@ class CourseDetailScreen extends StatelessWidget {
                           const SizedBox(height: 20),
                           Text('محتوى الكورس', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: 16.5)),
                           StreamBuilder<List<Lesson>>(
-                            stream: firestore.watchLessons(courseId),
+                            stream: firestore.watchLessons(widget.courseId),
                             builder: (context, lessonSnap) {
                               final lessons = lessonSnap.data ?? [];
+                              if (!_openedInitialLesson && widget.initialLessonNumber >= 2 && lessons.isNotEmpty) {
+                                final matches = lessons.where((l) => l.order == widget.initialLessonNumber).toList();
+                                final target = matches.isEmpty ? null : matches.first;
+                                if (target != null) {
+                                  _openedInitialLesson = true;
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    if (mounted) context.push('/course/${widget.courseId}/lesson/${target.id}');
+                                  });
+                                }
+                              }
                               return Column(
                                 children: lessons.map((l) {
                                   final locked = !purchased && !l.isPreview;
@@ -85,7 +103,7 @@ class CourseDetailScreen extends StatelessWidget {
                                     title: Text(l.title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
                                     subtitle: Text(l.durationLabel, style: const TextStyle(fontSize: 11.5)),
                                     trailing: Icon(locked ? Icons.lock_outline : Icons.play_circle_outline, size: 18, color: AppColors.muted),
-                                    onTap: locked ? null : () => context.push('/course/$courseId/lesson/${l.id}'),
+                                    onTap: locked ? null : () => context.push('/course/${widget.courseId}/lesson/${l.id}'),
                                   );
                                 }).toList(),
                               );

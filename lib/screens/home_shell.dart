@@ -5,6 +5,7 @@ import 'courses_tab.dart';
 import 'my_courses_tab.dart';
 import 'favorites_tab.dart';
 import 'notifications_tab.dart';
+import 'meetings_tab.dart';
 import 'account_tab.dart';
 import '../theme/app_theme.dart';
 
@@ -24,6 +25,7 @@ class _HomeShellState extends State<HomeShell> {
     MyCoursesTab(),
     FavoritesTab(),
     NotificationsTab(),
+    MeetingsTab(),
     AccountTab(),
   ];
 
@@ -75,6 +77,12 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.notifications_none),
             selectedIcon: Icon(Icons.notifications),
             label: 'الإشعارات',
+          ),
+
+          NavigationDestination(
+            icon: Icon(Icons.video_camera_front_outlined),
+            selectedIcon: Icon(Icons.video_camera_front),
+            label: 'المحاضرات',
           ),
 
           NavigationDestination(

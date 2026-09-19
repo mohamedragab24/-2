@@ -10,6 +10,8 @@ import 'screens/course_detail_screen.dart';
 import 'screens/lesson_player_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/change_password_screen.dart';
+import 'screens/meeting_screen.dart';
+import 'screens/admin_control_center_screen.dart';
 
 GoRouter buildRouter() {
   return GoRouter(
@@ -30,9 +32,14 @@ GoRouter buildRouter() {
       GoRoute(path: '/home', builder: (context, state) => const HomeShell()),
       GoRoute(
         path: '/course/:courseId',
-        builder: (context, state) => CourseDetailScreen(courseId: state.pathParameters['courseId']!),
+        builder: (context, state) => CourseDetailScreen(
+          courseId: state.pathParameters['courseId']!,
+          initialLessonNumber: int.tryParse(state.uri.queryParameters['lesson'] ?? '') ?? 1,
+        ),
       ),
       GoRoute(path: '/admin', builder: (context, state) => const AdminDashboardScreen()),
+      GoRoute(path: '/admin-control', builder: (context, state) => const AdminControlCenterScreen()),
+      GoRoute(path: '/meeting/:requestId', builder: (context, state) => MeetingScreen(requestId: state.pathParameters['requestId']!)),
       GoRoute(path: '/change-password', builder: (context, state) => const ChangePasswordScreen()),
       GoRoute(
         path: '/course/:courseId/lesson/:lessonId',

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'app_router.dart';
 import 'theme/app_theme.dart';
 import 'services/deep_link_service.dart';
 import 'services/screen_protection_service.dart';
 import 'services/app_update_service.dart';
+import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +45,15 @@ class _MasarAppState extends State<MasarApp> {
     // Android's FLAG_SECURE from this point on; on iOS this starts the
     // recording/screenshot listener that drives the overlay below.
     screenProtection.init();
+    NotificationService().init();
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      final requestId = message.data['requestId']?.toString();
+      if (requestId != null && requestId.isNotEmpty) router.push('/meeting/$requestId');
+    });
+    FirebaseMessaging.instance.getInitialMessage().then((message) {
+      final requestId = message?.data['requestId']?.toString();
+      if (requestId != null && requestId.isNotEmpty) router.push('/meeting/$requestId');
+    });
     _checkForUpdate();
     screenProtection.shouldBlockContent.listen((block) {
       if (mounted) setState(() => _blockContent = block);

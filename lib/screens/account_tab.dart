@@ -102,12 +102,12 @@ class AccountTab extends StatelessWidget {
                   trailing: const Icon(Icons.chevron_left),
                   onTap: profile == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => InstructorDashboardScreen(profile: profile))),
                 ),
-              if (profile?.role == 'admin')
+              if (profile?.isAdmin == true)
                 ListTile(
                   leading: const Icon(Icons.admin_panel_settings_outlined, color: AppColors.gold),
-                  title: const Text('لوحة الأدمن — مراجعة الكورسات'),
+                  title: const Text('لوحة التحكم الكاملة'),
                   trailing: const Icon(Icons.chevron_left),
-                  onTap: () => context.push('/admin'),
+                  onTap: () => context.push('/admin-control'),
                 ),
               const Divider(height: 1),
               ListTile(
