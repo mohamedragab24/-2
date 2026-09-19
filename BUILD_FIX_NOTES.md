@@ -27,3 +27,8 @@ in the execution environment, so the final APK build could not be executed here.
 
 
 v5 fixes: corrected Dart syntax in admin_control_center_screen.dart and meetings_tab.dart; removed unsupported minDate argument from showDatePicker for Flutter 3.24.5.
+
+
+## v6
+- Added the official Jitsi Maven repository to `android/settings.gradle` because the project uses `RepositoriesMode.PREFER_SETTINGS`; without it Gradle cannot resolve `org.jitsi.react:jitsi-meet-sdk:11.6.0`.
+- Added `cupertino_icons` to silence the CupertinoIcons font asset warning. `uses-material-design: true` was already present.
