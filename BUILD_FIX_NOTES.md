@@ -32,3 +32,7 @@ v5 fixes: corrected Dart syntax in admin_control_center_screen.dart and meetings
 ## v6
 - Added the official Jitsi Maven repository to `android/settings.gradle` because the project uses `RepositoriesMode.PREFER_SETTINGS`; without it Gradle cannot resolve `org.jitsi.react:jitsi-meet-sdk:11.6.0`.
 - Added `cupertino_icons` to silence the CupertinoIcons font asset warning. `uses-material-design: true` was already present.
+
+
+## v7
+- Raised Android minSdk from 23 to 24 because jitsi_meet_flutter_sdk 11.6.0 requires API 24.
