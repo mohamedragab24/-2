@@ -13,6 +13,12 @@ configurations.all {
     exclude group: "androidx.media3", module: "media3-exoplayer-rtsp"
 }
 
+dependencies {
+    // Giphy SDK 2.3.17 references Kotlin Parcelize runtime classes during R8.
+    // Keep the runtime explicitly available to release builds.
+    implementation "org.jetbrains.kotlin:kotlin-parcelize-runtime:1.9.24"
+}
+
 android {
     namespace "com.Fahmani"
     compileSdk 35
