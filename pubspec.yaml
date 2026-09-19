@@ -33,7 +33,7 @@ dependencies:
   jitsi_meet_flutter_sdk: ^13.1.1
   firebase_messaging: ^16.7.0
   camera: ^0.12.1
-  record: ^7.1.1
+  record: ^6.2.1
 
 dev_dependencies:
   flutter_test:
