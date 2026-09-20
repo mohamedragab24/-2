@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:go_router/go_router.dart';
 
 import 'app_router.dart';
 import 'theme/app_theme.dart';
@@ -17,20 +18,31 @@ Future<void> main() async {
   // files automatically — android/app/google-services.json and
   // ios/Runner/GoogleService-Info.plist (already placed in this project).
   // No FirebaseOptions object is required for those two platforms.
-  await Firebase.initializeApp();
+  // Do not let Firebase initialization hold the native Flutter splash forever.
+  // If initialization is temporarily unavailable, the app still starts and
+  // shows a retry screen instead of a permanent logo/black screen.
+  bool firebaseReady = false;
+  try {
+    await Firebase.initializeApp().timeout(const Duration(seconds: 12));
+    firebaseReady = true;
+  } catch (_) {
+    firebaseReady = false;
+  }
 
-  runApp(const MasarApp());
+  runApp(MasarApp(firebaseReady: firebaseReady));
 }
 
 class MasarApp extends StatefulWidget {
-  const MasarApp({super.key});
+  final bool firebaseReady;
+  const MasarApp({super.key, required this.firebaseReady});
 
   @override
   State<MasarApp> createState() => _MasarAppState();
 }
 
 class _MasarAppState extends State<MasarApp> {
-  late final router = buildRouter();
+  late GoRouter router;
+  late bool _firebaseReady;
   final deepLinkService = DeepLinkService();
   final screenProtection = ScreenProtectionService();
   final appUpdateService = AppUpdateService();
@@ -40,17 +52,21 @@ class _MasarAppState extends State<MasarApp> {
   @override
   void initState() {
     super.initState();
+    _firebaseReady = widget.firebaseReady;
+    router = buildRouter(firebaseReady: _firebaseReady);
     deepLinkService.init(router);
     // Applied once, here, for the whole app — every screen is covered by
     // Android's FLAG_SECURE from this point on; on iOS this starts the
     // recording/screenshot listener that drives the overlay below.
     screenProtection.init();
-    NotificationService().init();
+    if (_firebaseReady) {
+      NotificationService().init();
+    }
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       final requestId = message.data['requestId']?.toString();
       if (requestId != null && requestId.isNotEmpty) router.push('/meeting/$requestId');
     });
-    FirebaseMessaging.instance.getInitialMessage().then((message) {
+    if (_firebaseReady) FirebaseMessaging.instance.getInitialMessage().then((message) {
       final requestId = message?.data['requestId']?.toString();
       if (requestId != null && requestId.isNotEmpty) router.push('/meeting/$requestId');
     });
@@ -58,6 +74,18 @@ class _MasarAppState extends State<MasarApp> {
     screenProtection.shouldBlockContent.listen((block) {
       if (mounted) setState(() => _blockContent = block);
     });
+  }
+
+  Future<void> _restartFirebase() async {
+    try {
+      await Firebase.initializeApp().timeout(const Duration(seconds: 12));
+      if (!mounted) return;
+      setState(() {
+        _firebaseReady = true;
+        router = buildRouter(firebaseReady: true);
+      });
+      NotificationService().init();
+    } catch (_) {}
   }
 
   Future<void> _checkForUpdate() async {
@@ -126,6 +154,29 @@ class _MasarAppState extends State<MasarApp> {
           child: Stack(
             children: [
               child!,
+              if (!_firebaseReady)
+                Positioned.fill(
+                  child: Material(
+                    color: AppColors.ink,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.cloud_off, color: AppColors.gold, size: 44),
+                          const SizedBox(height: 16),
+                          const Text('تعذر الاتصال بخدمات التطبيق', style: TextStyle(color: AppColors.paper, fontSize: 18, fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 8),
+                          const Text('تحقق من الإنترنت ثم أعد المحاولة.', style: TextStyle(color: Color(0xFFA9BAC0))),
+                          const SizedBox(height: 20),
+                          ElevatedButton(
+                            onPressed: () => _restartFirebase(),
+                            child: const Text('إعادة المحاولة'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               // iOS-only in practice (Android never sets _blockContent since
               // FLAG_SECURE already blocks capture at the OS level). Covers
               // every screen — not just the player — the instant a
