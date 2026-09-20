@@ -13,11 +13,11 @@ import 'screens/change_password_screen.dart';
 import 'screens/meeting_screen.dart';
 import 'screens/admin_control_center_screen.dart';
 
-GoRouter buildRouter({required bool firebaseReady}) {
+GoRouter buildRouter() {
   return GoRouter(
     initialLocation: '/',
     redirect: (context, state) {
-      final loggedIn = firebaseReady && FirebaseAuth.instance.currentUser != null;
+      final loggedIn = FirebaseAuth.instance.currentUser != null;
       final loggingInRoutes = ['/login', '/signup', '/forgot-password', '/'];
       if (!loggedIn && !loggingInRoutes.contains(state.matchedLocation)) {
         return '/login';

@@ -1,3 +1,4 @@
+import '../services/r2_worker_service.dart';
 class Course {
   final String id;
   final String title;
@@ -56,7 +57,9 @@ class Course {
       category: (map['category'] ?? '').toString(),
 
       // يدعم بيانات الموقع الحالية
-      thumbnailUrl:
+      thumbnailUrl: R2WorkerService.tokenToUrl(
+            (map['thumbnailUrl'] ?? map['coverUrl'] ?? '').toString(),
+          ) ??
           (map['thumbnailUrl'] ?? map['coverUrl'] ?? '').toString(),
 
       price: _toDouble(map['price']),
