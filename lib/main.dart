@@ -13,13 +13,110 @@ import 'services/notification_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // On Android and iOS, Firebase.initializeApp() reads the native config
-  // files automatically — android/app/google-services.json and
-  // ios/Runner/GoogleService-Info.plist (already placed in this project).
-  // No FirebaseOptions object is required for those two platforms.
-  await Firebase.initializeApp();
+  try {
+    // Do not leave the user stuck on the native/Flutter logo forever if
+    // Firebase initialization is slow or blocked by network/configuration.
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp().timeout(const Duration(seconds: 12));
+    }
+    runApp(const MasarApp());
+  } catch (error) {
+    runApp(FirebaseStartupErrorApp(error: error));
+  }
+}
 
-  runApp(const MasarApp());
+class FirebaseStartupErrorApp extends StatelessWidget {
+  final Object error;
+
+  const FirebaseStartupErrorApp({super.key, required this.error});
+
+  Future<void> _retry(BuildContext context) async {
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp().timeout(const Duration(seconds: 12));
+      }
+      if (context.mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MasarApp()),
+          (_) => false,
+        );
+      }
+    } catch (retryError) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تعذر تشغيل Firebase: $retryError'),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      home: Scaffold(
+        backgroundColor: AppColors.ink,
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 84,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      color: AppColors.gold,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: const Icon(
+                      Icons.school_outlined,
+                      color: AppColors.ink,
+                      size: 40,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'تعذر تشغيل التطبيق',
+                    style: TextStyle(
+                      color: AppColors.paper,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'الاتصال بـ Firebase استغرق وقتًا أطول من المتوقع. اضغط إعادة المحاولة.',
+                    style: TextStyle(color: Color(0xFFA9BAC0), fontSize: 14),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error.toString(),
+                    style: const TextStyle(color: Color(0xFF7F9299), fontSize: 11),
+                    textAlign: TextAlign.center,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () => _retry(context),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('إعادة المحاولة'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class MasarApp extends StatefulWidget {
