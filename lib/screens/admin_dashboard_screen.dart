@@ -22,7 +22,7 @@ class AdminDashboardScreen extends StatelessWidget {
         if (profileSnap.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
-        if (profile?.role != 'admin') {
+        if (profile == null || !profile.isAdmin) {
           return const _Denied(message: 'ليس لديك صلاحية الدخول إلى لوحة الأدمن');
         }
         return const _AdminHome();
@@ -39,7 +39,7 @@ class _AdminHome extends StatelessWidget {
     final service = AdminService();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('لوحة الأدمن — مراجعة الكورسات'),
+        title: const Text('مركز الاعتماد الموحد — مراجعة الكورسات'),
         backgroundColor: AppColors.ink,
         foregroundColor: AppColors.paper,
       ),
