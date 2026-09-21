@@ -9,6 +9,7 @@ import 'services/deep_link_service.dart';
 import 'services/screen_protection_service.dart';
 import 'services/app_update_service.dart';
 import 'services/notification_service.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,7 +18,7 @@ Future<void> main() async {
     // Do not leave the user stuck on the native/Flutter logo forever if
     // Firebase initialization is slow or blocked by network/configuration.
     if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp().timeout(const Duration(seconds: 12));
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform).timeout(const Duration(seconds: 12));
     }
     runApp(const MasarApp());
   } catch (error) {
@@ -25,15 +26,24 @@ Future<void> main() async {
   }
 }
 
-class FirebaseStartupErrorApp extends StatelessWidget {
+class FirebaseStartupErrorApp extends StatefulWidget {
   final Object error;
 
   const FirebaseStartupErrorApp({super.key, required this.error});
 
+  @override
+  State<FirebaseStartupErrorApp> createState() => _FirebaseStartupErrorAppState();
+}
+
+class _FirebaseStartupErrorAppState extends State<FirebaseStartupErrorApp> {
+  bool _retrying = false;
+
   Future<void> _retry(BuildContext context) async {
+    if (_retrying) return;
+    setState(() => _retrying = true);
     try {
       if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp().timeout(const Duration(seconds: 12));
+        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform).timeout(const Duration(seconds: 12));
       }
       if (context.mounted) {
         Navigator.of(context).pushAndRemoveUntil(
@@ -43,10 +53,11 @@ class FirebaseStartupErrorApp extends StatelessWidget {
       }
     } catch (retryError) {
       if (!context.mounted) return;
+      setState(() => _retrying = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('تعذر تشغيل Firebase: $retryError'),
-          duration: const Duration(seconds: 6),
+          content: Text('لم يكتمل الاتصال بعد. حاول مرة أخرى.\n$retryError'),
+          duration: const Duration(seconds: 5),
         ),
       );
     }
@@ -97,7 +108,7 @@ class FirebaseStartupErrorApp extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    error.toString(),
+                    widget.error.toString(),
                     style: const TextStyle(color: Color(0xFF7F9299), fontSize: 11),
                     textAlign: TextAlign.center,
                     maxLines: 4,
@@ -105,9 +116,11 @@ class FirebaseStartupErrorApp extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton.icon(
-                    onPressed: () => _retry(context),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('إعادة المحاولة'),
+                    onPressed: _retrying ? null : () => _retry(context),
+                    icon: _retrying
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.refresh),
+                    label: Text(_retrying ? 'جاري إعادة الاتصال...' : 'إعادة المحاولة'),
                   ),
                 ],
               ),
@@ -142,7 +155,8 @@ class _MasarAppState extends State<MasarApp> {
     // Android's FLAG_SECURE from this point on; on iOS this starts the
     // recording/screenshot listener that drives the overlay below.
     screenProtection.init();
-    NotificationService().init();
+    // Notifications must never be allowed to block/crash the app startup.
+    NotificationService().init().catchError((_) {});
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       final requestId = message.data['requestId']?.toString();
       if (requestId != null && requestId.isNotEmpty) router.push('/meeting/$requestId');
