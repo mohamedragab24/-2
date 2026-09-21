@@ -19,14 +19,25 @@ class FirestoreService {
     }
 
     return query.snapshots().map(
-          (snapshot) => snapshot.docs
-              .map(
-                (doc) => Course.fromMap(
-                  doc.id,
-                  doc.data(),
-                ),
-              )
-              .toList(),
+          (snapshot) {
+            final courses = snapshot.docs
+                .map(
+                  (doc) => Course.fromMap(
+                    doc.id,
+                    doc.data(),
+                  ),
+                )
+                .toList();
+
+            // Keep the app catalog deterministic and aligned with the
+            // platform's course list.
+            courses.sort(
+              (a, b) => a.title.toLowerCase().compareTo(
+                    b.title.toLowerCase(),
+                  ),
+            );
+            return courses;
+          },
         );
   }
 

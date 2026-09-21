@@ -14,7 +14,7 @@ class CoursesTab extends StatefulWidget {
 
 class _CoursesTabState extends State<CoursesTab> {
   String _category = 'الكل';
-  final _categories = const ['الكل', 'برمجة', 'تصميم', 'تسويق', 'بيانات'];
+  final _categories = const ['الكل', 'البرمجة والتقنية', 'الرياضيات والعلوم', 'الذكاء الاصطناعي', 'اللغات والآداب', 'التصميم والمونتاج', 'إدارة الأعمال والتسويق'];
   final _firestore = FirestoreService();
 
   @override
@@ -54,9 +54,30 @@ class _CoursesTabState extends State<CoursesTab> {
             child: StreamBuilder<List<Course>>(
               stream: _firestore.watchCourses(category: _category),
               builder: (context, snap) {
-                if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                if (snap.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'تعذر تحميل الكورسات من منصة فهمت.\n${snap.error}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.muted),
+                      ),
+                    ),
+                  );
+                }
+                if (!snap.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
                 final courses = snap.data!;
-                if (courses.isEmpty) return const Center(child: Text('لا يوجد كورسات في هذا التصنيف', style: TextStyle(color: AppColors.muted)));
+                if (courses.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'لا يوجد كورسات في هذا التصنيف',
+                      style: TextStyle(color: AppColors.muted),
+                    ),
+                  );
+                }
                 return GridView.builder(
                   padding: const EdgeInsets.all(18),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
