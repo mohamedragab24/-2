@@ -14,57 +14,118 @@ import 'firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    // Do not leave the user stuck on the native/Flutter logo forever if
-    // Firebase initialization is slow or blocked by network/configuration.
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform).timeout(const Duration(seconds: 12));
-    }
-    runApp(const MasarApp());
-  } catch (error) {
-    runApp(FirebaseStartupErrorApp(error: error));
-  }
+  // IMPORTANT: Firebase is no longer allowed to block Flutter from creating
+  // the first screen. The app starts immediately and StartupGate performs
+  // Firebase initialization in the background.
+  runApp(const StartupGate());
 }
 
-class FirebaseStartupErrorApp extends StatefulWidget {
-  final Object error;
-
-  const FirebaseStartupErrorApp({super.key, required this.error});
+class StartupGate extends StatefulWidget {
+  const StartupGate({super.key});
 
   @override
-  State<FirebaseStartupErrorApp> createState() => _FirebaseStartupErrorAppState();
+  State<StartupGate> createState() => _StartupGateState();
 }
 
-class _FirebaseStartupErrorAppState extends State<FirebaseStartupErrorApp> {
-  bool _retrying = false;
+class _StartupGateState extends State<StartupGate> {
+  bool _ready = false;
+  bool _loading = true;
+  String? _error;
+  int _attempt = 0;
 
-  Future<void> _retry(BuildContext context) async {
-    if (_retrying) return;
-    setState(() => _retrying = true);
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startFirebase());
+  }
+
+  Future<void> _startFirebase() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    final attempt = ++_attempt;
     try {
+      // If Firebase was initialized by the native side/plugin already, do not
+      // initialize it a second time.
       if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform).timeout(const Duration(seconds: 12));
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        ).timeout(const Duration(seconds: 12));
       }
-      if (context.mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const MasarApp()),
-          (_) => false,
-        );
+
+      if (!mounted || attempt != _attempt) return;
+      setState(() {
+        _ready = true;
+        _loading = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted || attempt != _attempt) return;
+
+      // A duplicate-app response means another initialization completed while
+      // this attempt was waiting. Treat that as success rather than showing a
+      // false startup failure.
+      final message = error.toString().toLowerCase();
+      if (Firebase.apps.isNotEmpty || message.contains('duplicate-app')) {
+        setState(() {
+          _ready = true;
+          _loading = false;
+          _error = null;
+        });
+        return;
       }
-    } catch (retryError) {
-      if (!context.mounted) return;
-      setState(() => _retrying = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('لم يكتمل الاتصال بعد. حاول مرة أخرى.\n$retryError'),
-          duration: const Duration(seconds: 5),
-        ),
-      );
+
+      setState(() {
+        _ready = false;
+        _loading = false;
+        _error = error.toString();
+      });
     }
+  }
+
+  Future<void> _retry() async {
+    // Do not start multiple Firebase attempts at the same time.
+    if (_loading) return;
+
+    // Give a timed-out native initialization a moment to finish before a new
+    // attempt. If it finished meanwhile, _startFirebase will simply detect
+    // Firebase.apps and continue.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+    await _startFirebase();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_ready) return const MasarApp();
+
+    return StartupScreen(
+      loading: _loading,
+      error: _error,
+      onRetry: _retry,
+    );
+  }
+}
+
+class StartupScreen extends StatelessWidget {
+  final bool loading;
+  final String? error;
+  final VoidCallback onRetry;
+
+  const StartupScreen({
+    super.key,
+    required this.loading,
+    required this.error,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasError = !loading && error != null;
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
@@ -91,9 +152,9 @@ class _FirebaseStartupErrorAppState extends State<FirebaseStartupErrorApp> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  const Text(
-                    'تعذر تشغيل التطبيق',
-                    style: TextStyle(
+                  Text(
+                    loading ? 'جاري تشغيل التطبيق' : 'تعذر الاتصال بالخدمة',
+                    style: const TextStyle(
                       color: AppColors.paper,
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
@@ -101,27 +162,36 @@ class _FirebaseStartupErrorAppState extends State<FirebaseStartupErrorApp> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    'الاتصال بـ Firebase استغرق وقتًا أطول من المتوقع. اضغط إعادة المحاولة.',
-                    style: TextStyle(color: Color(0xFFA9BAC0), fontSize: 14),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
                   Text(
-                    widget.error.toString(),
-                    style: const TextStyle(color: Color(0xFF7F9299), fontSize: 11),
+                    loading
+                        ? 'جاري تجهيز خدمات التطبيق...'
+                        : 'التطبيق نفسه يعمل، لكن لم يكتمل الاتصال بخدمات Firebase.',
+                    style: const TextStyle(
+                      color: Color(0xFFA9BAC0),
+                      fontSize: 14,
+                    ),
                     textAlign: TextAlign.center,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: _retrying ? null : () => _retry(context),
-                    icon: _retrying
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.refresh),
-                    label: Text(_retrying ? 'جاري إعادة الاتصال...' : 'إعادة المحاولة'),
-                  ),
+                  if (hasError) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'تأكد من الإنترنت ثم اضغط إعادة المحاولة.',
+                      style: const TextStyle(
+                        color: Color(0xFFA9BAC0),
+                        fontSize: 12,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  const SizedBox(height: 22),
+                  if (loading)
+                    const CircularProgressIndicator()
+                  else
+                    ElevatedButton.icon(
+                      onPressed: onRetry,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('إعادة المحاولة'),
+                    ),
                 ],
               ),
             ),
@@ -150,37 +220,43 @@ class _MasarAppState extends State<MasarApp> {
   @override
   void initState() {
     super.initState();
-    deepLinkService.init(router);
-    // Applied once, here, for the whole app — every screen is covered by
-    // Android's FLAG_SECURE from this point on; on iOS this starts the
-    // recording/screenshot listener that drives the overlay below.
-    screenProtection.init();
-    // Notifications must never be allowed to block/crash the app startup.
-    NotificationService().init().catchError((_) {});
-    FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      final requestId = message.data['requestId']?.toString();
-      if (requestId != null && requestId.isNotEmpty) router.push('/meeting/$requestId');
+    // Keep startup lightweight: optional services are initialized after the
+    // first frame and each failure is isolated so one plugin can never stop
+    // the main application from opening.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try { deepLinkService.init(router); } catch (_) {}
+      screenProtection.init().catchError((_) {});
+      NotificationService().init().catchError((_) {});
+      FirebaseMessaging.onMessageOpenedApp.listen((message) {
+        try {
+          final requestId = message.data['requestId']?.toString();
+          if (requestId != null && requestId.isNotEmpty) router.push('/meeting/$requestId');
+        } catch (_) {}
+      });
+      FirebaseMessaging.instance.getInitialMessage().then((message) {
+        if (!mounted) return;
+        final requestId = message?.data['requestId']?.toString();
+        if (requestId != null && requestId.isNotEmpty) router.push('/meeting/$requestId');
+      }).catchError((_) {});
+      _checkForUpdate();
     });
-    FirebaseMessaging.instance.getInitialMessage().then((message) {
-      final requestId = message?.data['requestId']?.toString();
-      if (requestId != null && requestId.isNotEmpty) router.push('/meeting/$requestId');
-    });
-    _checkForUpdate();
     screenProtection.shouldBlockContent.listen((block) {
       if (mounted) setState(() => _blockContent = block);
     });
   }
 
   Future<void> _checkForUpdate() async {
-    // Give Firebase/router time to finish starting before showing a dialog.
-    await Future<void>.delayed(const Duration(seconds: 2));
-    if (!mounted || _updateDialogShown) return;
+    try {
+      // Give Firebase/router time to finish starting before showing a dialog.
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!mounted || _updateDialogShown) return;
 
-    final update = await appUpdateService.checkForAndroidUpdate();
-    if (!mounted || update == null || _updateDialogShown) return;
+      final update = await appUpdateService.checkForAndroidUpdate();
+      if (!mounted || update == null || _updateDialogShown) return;
 
-    _updateDialogShown = true;
-    await showDialog<void>(
+      _updateDialogShown = true;
+      await showDialog<void>(
       context: context,
       barrierDismissible: true,
       builder: (context) => AlertDialog(
@@ -205,7 +281,10 @@ class _MasarAppState extends State<MasarApp> {
           ),
         ],
       ),
-    );
+      );
+    } catch (_) {
+      // Optional update checking must never affect normal app usage.
+    }
   }
 
   @override
