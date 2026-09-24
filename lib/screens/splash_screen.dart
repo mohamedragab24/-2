@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 
@@ -14,11 +15,22 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(milliseconds: 1400), () {
+    _waitForFirebaseAndContinue();
+  }
+
+  Future<void> _waitForFirebaseAndContinue() async {
+    for (var i = 0; i < 30; i++) {
       if (!mounted) return;
-      final loggedIn = FirebaseAuth.instance.currentUser != null;
-      context.go(loggedIn ? '/home' : '/login');
-    });
+      if (Firebase.apps.isNotEmpty) {
+        final loggedIn = FirebaseAuth.instance.currentUser != null;
+        if (mounted) context.go(loggedIn ? '/home' : '/login');
+        return;
+      }
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+    // Keep the normal splash visible. The background Firebase initializer
+    // continues retrying; no Firebase connection-error page is ever shown.
+    if (mounted) setState(() {});
   }
 
   @override

@@ -59,7 +59,7 @@ class _CoursesTabState extends State<CoursesTab> {
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        'تعذر تحميل الكورسات من منصة فهمت.\n${snap.error}',
+                        'جاري إعادة الاتصال وتحميل الكورسات من منصة فهمت...\nسيتم تحديث القائمة تلقائيًا عند عودة الاتصال.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: AppColors.muted),
                       ),
