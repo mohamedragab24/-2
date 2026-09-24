@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'app_router.dart';
 import 'theme/app_theme.dart';
@@ -46,22 +47,47 @@ class _MasarAppState extends State<MasarApp> {
       try { deepLinkService.init(router); } catch (_) {}
       screenProtection.init().catchError((_) {});
       NotificationService().init().catchError((_) {});
-      FirebaseMessaging.onMessageOpenedApp.listen((message) {
-        try {
-          final requestId = message.data['requestId']?.toString();
-          if (requestId != null && requestId.isNotEmpty) router.push('/meeting/$requestId');
-        } catch (_) {}
-      });
-      FirebaseMessaging.instance.getInitialMessage().then((message) {
-        if (!mounted) return;
-        final requestId = message?.data['requestId']?.toString();
-        if (requestId != null && requestId.isNotEmpty) router.push('/meeting/$requestId');
-      }).catchError((_) {});
+      // Firebase Messaging must not be touched until Firebase Core is ready.
+      // Accessing FirebaseMessaging.instance too early can throw
+      // [core/no-app] and leave a release build on a blank screen.
+      _initMessagingSafely();
       _checkForUpdate();
     });
     screenProtection.shouldBlockContent.listen((block) {
       if (mounted) setState(() => _blockContent = block);
     });
+  }
+
+  Future<void> _initMessagingSafely() async {
+    try {
+      // Wait briefly for Firebase bootstrap, but never block the UI.
+      for (var i = 0; i < 20; i++) {
+        if (Firebase.apps.isNotEmpty) break;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      if (!mounted || Firebase.apps.isEmpty) return;
+
+      try {
+        FirebaseMessaging.onMessageOpenedApp.listen((message) {
+          if (!mounted) return;
+          final requestId = message.data['requestId']?.toString();
+          if (requestId != null && requestId.isNotEmpty) {
+            router.push('/meeting/$requestId');
+          }
+        });
+      } catch (_) {}
+
+      try {
+        final message = await FirebaseMessaging.instance.getInitialMessage();
+        if (!mounted) return;
+        final requestId = message?.data['requestId']?.toString();
+        if (requestId != null && requestId.isNotEmpty) {
+          router.push('/meeting/$requestId');
+        }
+      } catch (_) {}
+    } catch (_) {
+      // Messaging is optional during startup. It must never blank the app.
+    }
   }
 
   Future<void> _checkForUpdate() async {
