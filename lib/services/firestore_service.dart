@@ -41,6 +41,17 @@ class FirestoreService {
         );
   }
 
+  Future<List<Course>> getPublishedCoursesOnce({String? category}) async {
+    Query<Map<String, dynamic>> query = _db.collection('courses').where('status', isEqualTo: 'published');
+    if (category != null && category != 'الكل') {
+      query = query.where('category', isEqualTo: category);
+    }
+    final snapshot = await query.get();
+    final courses = snapshot.docs.map((doc) => Course.fromMap(doc.id, doc.data())).toList();
+    courses.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    return courses;
+  }
+
   Future<Course?> getCourse(String courseId) async {
     final doc = await _db.collection('courses').doc(courseId).get();
 

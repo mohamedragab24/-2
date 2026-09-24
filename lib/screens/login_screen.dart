@@ -66,6 +66,12 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
+      if (user.emailVerified == false) {
+        await _auth.sendEmailVerification();
+        if (mounted) context.go('/verify-email');
+        return;
+      }
+
       await FirestoreService().ensureUserProfile(
         uid: user.uid,
         name: user.displayName,

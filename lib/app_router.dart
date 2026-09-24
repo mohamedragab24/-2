@@ -12,13 +12,17 @@ import 'screens/admin_dashboard_screen.dart';
 import 'screens/change_password_screen.dart';
 import 'screens/meeting_screen.dart';
 import 'screens/admin_control_center_screen.dart';
+import 'screens/verify_email_screen.dart';
 
 GoRouter buildRouter() {
   return GoRouter(
     initialLocation: '/',
     redirect: (context, state) {
       final loggedIn = FirebaseAuth.instance.currentUser != null;
-      final loggingInRoutes = ['/login', '/signup', '/forgot-password', '/'];
+      final loggingInRoutes = ['/login', '/signup', '/forgot-password', '/', '/verify-email'];
+      if (loggedIn && FirebaseAuth.instance.currentUser?.emailVerified == false && state.matchedLocation != '/verify-email') {
+        return '/verify-email';
+      }
       if (!loggedIn && !loggingInRoutes.contains(state.matchedLocation)) {
         return '/login';
       }
@@ -29,6 +33,7 @@ GoRouter buildRouter() {
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(path: '/signup', builder: (context, state) => const SignupScreen()),
       GoRoute(path: '/forgot-password', builder: (context, state) => const ForgotPasswordScreen()),
+      GoRoute(path: '/verify-email', builder: (context, state) => const VerifyEmailScreen()),
       GoRoute(path: '/home', builder: (context, state) => const HomeShell()),
       GoRoute(
         path: '/course/:courseId',

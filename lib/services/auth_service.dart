@@ -71,6 +71,24 @@ class AuthService {
     await user.updatePassword(newPassword);
   }
 
+
+  Future<void> sendEmailVerification() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(code: 'no-current-user', message: 'يجب تسجيل الدخول أولاً');
+    }
+    if (!user.emailVerified) {
+      await user.sendEmailVerification();
+    }
+  }
+
+  Future<bool> refreshEmailVerification() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    await user.reload();
+    return _auth.currentUser?.emailVerified == true;
+  }
+
   Future<void> signOut() {
     return _auth.signOut();
   }

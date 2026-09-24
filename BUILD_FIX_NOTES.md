@@ -1,11 +1,10 @@
-# Build fix v8
-
-- Raised Android `minSdk` from 24 to 26 because Jitsi Meet SDK 11.6.0 declares minSdk 26.
-- Added `tools:replace="android:label"` to the application manifest to resolve the Jitsi manifest label conflict while keeping the app label `مسار`.
-- The AndroidX/legacy support-library messages for Giphy and Media3 are warnings; they are not the build-stopping errors in the reported log.
-
-Run:
-flutter clean
-flutter pub get
-flutter analyze
-flutter build apk --release --build-number 87 --build-name 1.0.87
+V20 changes:
+- Restored Firebase email verification flow with /verify-email screen.
+- Login sends unverified users to verification instead of /home.
+- Signup sends verification email and opens verification screen.
+- Router redirects authenticated but unverified users to /verify-email.
+- Verification screen supports reload/check, resend, and logout.
+- Courses continue to load from Firestore `courses` where `status == published`.
+- Added getPublishedCoursesOnce() helper for reliable one-shot course loading.
+- Existing R2 token URL conversion remains in Course.fromMap for course thumbnails.
+- No course deletion or replacement logic was introduced.

@@ -14,66 +14,118 @@ import 'firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Firebase initialization is local/native configuration and should not be
-  // artificially failed by a short network timeout. We initialize it before
-  // building Firebase-dependent screens, and show a retry only if the native
-  // Firebase plugin actually reports an error.
-  try {
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-    }
-    runApp(const MasarApp());
-  } catch (error) {
-    runApp(FirebaseStartupErrorApp(error: error));
-  }
+  // IMPORTANT: Firebase is no longer allowed to block Flutter from creating
+  // the first screen. The app starts immediately and StartupGate performs
+  // Firebase initialization in the background.
+  runApp(const StartupGate());
 }
 
-class FirebaseStartupErrorApp extends StatefulWidget {
-  final Object error;
-  const FirebaseStartupErrorApp({super.key, required this.error});
+class StartupGate extends StatefulWidget {
+  const StartupGate({super.key});
 
   @override
-  State<FirebaseStartupErrorApp> createState() => _FirebaseStartupErrorAppState();
+  State<StartupGate> createState() => _StartupGateState();
 }
 
-class _FirebaseStartupErrorAppState extends State<FirebaseStartupErrorApp> {
-  bool _retrying = false;
-  String? _errorText;
+class _StartupGateState extends State<StartupGate> {
+  bool _ready = false;
+  bool _loading = true;
+  String? _error;
+  int _attempt = 0;
 
   @override
   void initState() {
     super.initState();
-    _errorText = widget.error.toString();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startFirebase());
   }
 
-  Future<void> _retry() async {
-    if (_retrying) return;
-    setState(() => _retrying = true);
+  Future<void> _startFirebase() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
 
+    final attempt = ++_attempt;
     try {
+      // If Firebase was initialized by the native side/plugin already, do not
+      // initialize it a second time.
       if (Firebase.apps.isEmpty) {
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
-        );
+        ).timeout(const Duration(seconds: 12));
       }
-      if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MasarApp()),
-        (_) => false,
-      );
-    } catch (error) {
-      if (!mounted) return;
+
+      if (!mounted || attempt != _attempt) return;
       setState(() {
-        _retrying = false;
-        _errorText = error.toString();
+        _ready = true;
+        _loading = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted || attempt != _attempt) return;
+
+      // A duplicate-app response means another initialization completed while
+      // this attempt was waiting. Treat that as success rather than showing a
+      // false startup failure.
+      final message = error.toString().toLowerCase();
+      if (Firebase.apps.isNotEmpty || message.contains('duplicate-app')) {
+        setState(() {
+          _ready = true;
+          _loading = false;
+          _error = null;
+        });
+        return;
+      }
+
+      setState(() {
+        _ready = false;
+        _loading = false;
+        _error = error.toString();
       });
     }
   }
 
+  Future<void> _retry() async {
+    // Do not start multiple Firebase attempts at the same time.
+    if (_loading) return;
+
+    // Give a timed-out native initialization a moment to finish before a new
+    // attempt. If it finished meanwhile, _startFirebase will simply detect
+    // Firebase.apps and continue.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+    await _startFirebase();
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_ready) return const MasarApp();
+
+    return StartupScreen(
+      loading: _loading,
+      error: _error,
+      onRetry: _retry,
+    );
+  }
+}
+
+class StartupScreen extends StatelessWidget {
+  final bool loading;
+  final String? error;
+  final VoidCallback onRetry;
+
+  const StartupScreen({
+    super.key,
+    required this.loading,
+    required this.error,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasError = !loading && error != null;
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
@@ -86,36 +138,60 @@ class _FirebaseStartupErrorAppState extends State<FirebaseStartupErrorApp> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.cloud_off, color: AppColors.gold, size: 58),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'تعذر تشغيل خدمات Firebase',
-                    style: TextStyle(color: AppColors.paper, fontSize: 21, fontWeight: FontWeight.w800),
+                  Container(
+                    width: 84,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      color: AppColors.gold,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: const Icon(
+                      Icons.school_outlined,
+                      color: AppColors.ink,
+                      size: 40,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    loading ? 'جاري تشغيل التطبيق' : 'تعذر الاتصال بالخدمة',
+                    style: const TextStyle(
+                      color: AppColors.paper,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    'حدث خطأ أثناء تهيئة Firebase. اضغط إعادة المحاولة.',
-                    style: TextStyle(color: Color(0xFFA9BAC0), fontSize: 14),
+                  Text(
+                    loading
+                        ? 'جاري تجهيز خدمات التطبيق...'
+                        : 'التطبيق نفسه يعمل، لكن لم يكتمل الاتصال بخدمات Firebase.',
+                    style: const TextStyle(
+                      color: Color(0xFFA9BAC0),
+                      fontSize: 14,
+                    ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 18),
-                  if (_retrying)
+                  if (hasError) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'تأكد من الإنترنت ثم اضغط إعادة المحاولة.',
+                      style: const TextStyle(
+                        color: Color(0xFFA9BAC0),
+                        fontSize: 12,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  const SizedBox(height: 22),
+                  if (loading)
                     const CircularProgressIndicator()
                   else
                     ElevatedButton.icon(
-                      onPressed: _retry,
+                      onPressed: onRetry,
                       icon: const Icon(Icons.refresh),
                       label: const Text('إعادة المحاولة'),
                     ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _errorText ?? '',
-                    maxLines: 5,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Color(0xFF81939A), fontSize: 10),
-                  ),
                 ],
               ),
             ),

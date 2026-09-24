@@ -25,13 +25,14 @@ class _SignupScreenState extends State<SignupScreen> {
       final cred = await _auth.signUp(_nameCtrl.text.trim(), _emailCtrl.text.trim(), _passCtrl.text);
       final user = cred.user;
       if (user != null) {
+        await _auth.sendEmailVerification();
         await FirestoreService().ensureUserProfile(
           uid: user.uid,
           name: _nameCtrl.text.trim(),
           email: _emailCtrl.text.trim(),
         );
       }
-      if (mounted) context.go('/home');
+      if (mounted) context.go('/verify-email');
     } catch (e) {
       setState(() => _error = 'تعذّر إنشاء الحساب — تأكد من البيانات المدخلة');
     } finally {
