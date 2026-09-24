@@ -14,16 +14,35 @@ import 'screens/change_password_screen.dart';
 import 'screens/meeting_screen.dart';
 import 'screens/admin_control_center_screen.dart';
 import 'screens/verify_email_screen.dart';
+import 'services/firebase_bootstrap.dart';
 
 GoRouter buildRouter() {
+  final firebaseBootstrap = FirebaseBootstrap.instance;
+
   return GoRouter(
     initialLocation: '/',
+    refreshListenable: firebaseBootstrap.ready,
     redirect: (context, state) {
-      final loggedIn = Firebase.apps.isNotEmpty && FirebaseAuth.instance.currentUser != null;
+      final firebaseReady = firebaseBootstrap.ready.value && Firebase.apps.isNotEmpty;
+      final loggedIn = firebaseReady && FirebaseAuth.instance.currentUser != null;
       final loggingInRoutes = ['/login', '/signup', '/forgot-password', '/', '/verify-email'];
+
+      if (!firebaseReady) {
+        // Do not force protected screens while Firebase is still starting.
+        // The splash hands off to login quickly instead of hanging forever.
+        if (state.matchedLocation == '/') return null;
+        if (!loggingInRoutes.contains(state.matchedLocation)) return '/login';
+        return null;
+      }
+
       if (loggedIn && FirebaseAuth.instance.currentUser?.emailVerified == false && state.matchedLocation != '/verify-email') {
         return '/verify-email';
       }
+
+      if (loggedIn && ['/login', '/signup', '/forgot-password', '/'].contains(state.matchedLocation)) {
+        return '/home';
+      }
+
       if (!loggedIn && !loggingInRoutes.contains(state.matchedLocation)) {
         return '/login';
       }

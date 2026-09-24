@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import '../services/firebase_bootstrap.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 
@@ -15,22 +16,23 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _waitForFirebaseAndContinue();
+    _waitForStartup();
   }
 
-  Future<void> _waitForFirebaseAndContinue() async {
-    for (var i = 0; i < 30; i++) {
-      if (!mounted) return;
-      if (Firebase.apps.isNotEmpty) {
-        final loggedIn = FirebaseAuth.instance.currentUser != null;
-        if (mounted) context.go(loggedIn ? '/home' : '/login');
-        return;
-      }
-      await Future<void>.delayed(const Duration(seconds: 1));
+  Future<void> _waitForStartup() async {
+    // Splash is only a visual hand-off. Never wait for Firebase here.
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+
+    if (FirebaseBootstrap.instance.ready.value && Firebase.apps.isNotEmpty) {
+      final loggedIn = FirebaseAuth.instance.currentUser != null;
+      context.go(loggedIn ? '/home' : '/login');
+    } else {
+      // Firebase may still finish in the background. The router listens to
+      // FirebaseBootstrap.ready and will move an already-authenticated user
+      // to the correct screen when it becomes available.
+      context.go('/login');
     }
-    // Keep the normal splash visible. The background Firebase initializer
-    // continues retrying; no Firebase connection-error page is ever shown.
-    if (mounted) setState(() {});
   }
 
   @override

@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
@@ -9,31 +9,16 @@ import 'services/deep_link_service.dart';
 import 'services/screen_protection_service.dart';
 import 'services/app_update_service.dart';
 import 'services/notification_service.dart';
-import 'firebase_options.dart';
+import 'services/firebase_bootstrap.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Never block the application on Firebase initialization and never show a
-  // Firebase connection error page. Firebase is initialized in the background.
+  // The UI must never wait for Firebase. Start the Firebase connection in
+  // the background and let the app open immediately.
   runApp(const MasarApp());
-  _initializeFirebaseInBackground();
+  unawaited(FirebaseBootstrap.instance.start());
 }
-
-Future<void> _initializeFirebaseInBackground() async {
-  while (Firebase.apps.isEmpty) {
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      ).timeout(const Duration(seconds: 15));
-      return;
-    } catch (_) {
-      // Silent retry. Never replace the application with a Firebase error page.
-      await Future<void>.delayed(const Duration(seconds: 4));
-    }
-  }
-}
-
 
 class MasarApp extends StatefulWidget {
   const MasarApp({super.key});
