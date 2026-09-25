@@ -56,11 +56,16 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final firebaseReady = await FirebaseBootstrap.instance.waitUntilReady();
+      final firebaseReady = await FirebaseBootstrap.instance.waitUntilReady(
+        timeout: const Duration(seconds: 30),
+      );
       if (!firebaseReady) {
+        final details = FirebaseBootstrap.instance.lastError;
         throw FirebaseAuthException(
           code: 'firebase-not-ready',
-          message: 'لم تكتمل تهيئة Firebase بعد. تحقق من الإنترنت وحاول مرة أخرى.',
+          message: details.isEmpty
+              ? 'لم تكتمل تهيئة خدمات Firebase بعد.'
+              : 'لم تكتمل تهيئة Firebase: $details',
         );
       }
 
@@ -139,7 +144,9 @@ class _LoginScreenState extends State<LoginScreen> {
           break;
 
         case 'firebase-not-ready':
-          message = 'Firebase لم يكتمل تشغيله. تحقق من الإنترنت وحاول مرة أخرى.';
+          message = e.message?.isNotEmpty == true
+              ? e.message!
+              : 'لم تكتمل تهيئة Firebase بعد. حاول مرة أخرى.';
           break;
 
         case 'operation-not-allowed':
