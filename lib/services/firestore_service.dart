@@ -5,7 +5,7 @@ import '../models/lesson.dart';
 import '../models/user_profile.dart';
 
 class FirestoreService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  FirebaseFirestore get _db => FirebaseFirestore.instance;
 
   // ==================== COURSES ====================
 

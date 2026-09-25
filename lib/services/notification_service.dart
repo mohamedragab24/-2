@@ -4,8 +4,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class NotificationService {
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  FirebaseMessaging get _messaging => FirebaseMessaging.instance;
+  FirebaseFirestore get _db => FirebaseFirestore.instance;
   StreamSubscription<String>? _tokenSub;
 
   Future<void> init() async {
