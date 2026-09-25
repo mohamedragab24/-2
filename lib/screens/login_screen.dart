@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../services/auth_service.dart';
+import '../services/firebase_bootstrap.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 
@@ -55,6 +56,14 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      final firebaseReady = await FirebaseBootstrap.instance.waitUntilReady();
+      if (!firebaseReady) {
+        throw FirebaseAuthException(
+          code: 'firebase-not-ready',
+          message: 'لم تكتمل تهيئة Firebase بعد. تحقق من الإنترنت وحاول مرة أخرى.',
+        );
+      }
+
       final cred = await _auth.signIn(email, password);
 
       final user = cred.user;
@@ -62,22 +71,35 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user == null) {
         throw FirebaseAuthException(
           code: 'user-null',
-          message: 'تعذر الحصول على بيانات المستخدم',
+          message: 'تعذر الحصول على بيانات المستخدم بعد نجاح تسجيل الدخول',
         );
       }
 
       if (user.emailVerified == false) {
-        await _auth.sendEmailVerification();
+        try {
+          await _auth.sendEmailVerification();
+        } catch (_) {
+          // Verification email is secondary; do not turn a successful Auth
+          // login into a generic failure. The verify screen can retry it.
+        }
         if (mounted) context.go('/verify-email');
         return;
       }
 
-      await FirestoreService().ensureUserProfile(
-        uid: user.uid,
-        name: user.displayName,
-        email: user.email,
-        phone: user.phoneNumber,
-      );
+      // Firestore profile sync must not make a successful Firebase Auth login
+      // look like a failed login. If Firestore rules/network fail, continue to
+      // the home screen and let the profile sync recover later.
+      try {
+        await FirestoreService().ensureUserProfile(
+          uid: user.uid,
+          name: user.displayName,
+          email: user.email,
+          phone: user.phoneNumber,
+        ).timeout(const Duration(seconds: 8));
+      } catch (_) {
+        // Auth succeeded. Do not block the user because profile persistence
+        // is a separate Firestore operation.
+      }
 
       if (!mounted) return;
 
@@ -116,6 +138,10 @@ class _LoginScreenState extends State<LoginScreen> {
           message = 'تحقق من اتصال الإنترنت وحاول مرة أخرى';
           break;
 
+        case 'firebase-not-ready':
+          message = 'Firebase لم يكتمل تشغيله. تحقق من الإنترنت وحاول مرة أخرى.';
+          break;
+
         case 'operation-not-allowed':
           message =
               'تسجيل الدخول بالبريد الإلكتروني غير مفعّل في Firebase';
@@ -132,7 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       setState(() {
-        _error = 'حدث خطأ غير متوقع أثناء تسجيل الدخول';
+        _error = 'تعذر إكمال تسجيل الدخول. تفاصيل الخطأ: $e';
       });
     } finally {
       if (mounted) {
