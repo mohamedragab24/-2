@@ -57,7 +57,11 @@ class FirebaseBootstrap {
       return true;
     }
 
-    await start();
+    // Start the retry loop in the background. Do NOT await start() here: the
+    // retry loop is intentionally long-lived and may keep retrying forever.
+    // Awaiting it would leave callers (including LoginScreen) stuck on
+    // "جاري التحميل" forever whenever Firebase cannot initialize.
+    unawaited(start());
     if (ready.value || Firebase.apps.isNotEmpty) return true;
 
     final completer = Completer<bool>();
