@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import android.app.Activity
 import android.app.Application
+import com.google.firebase.FirebaseApp
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -14,6 +15,18 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize the native Firebase app as early as Android can. This
+        // complements firebase_core and prevents startup from depending on a
+        // Dart-side auto-configuration lookup.
+        try {
+            if (FirebaseApp.getApps(this).isEmpty()) {
+                FirebaseApp.initializeApp(this)
+            }
+        } catch (_: Exception) {
+            // firebase_core will retry from Dart and expose the real error.
+        }
+
         enableScreenProtection()
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, state: Bundle?) { activity.window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE) }
