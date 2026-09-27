@@ -76,11 +76,9 @@ class MainActivity : FlutterActivity() {
      * the Flutter engine; the explicit check also makes startup deterministic.
      */
     private fun ensureNativeFirebase(): Boolean {
-        val apps = FirebaseApp.getApps(this)
-        if (apps.any { it.name == FirebaseApp.DEFAULT_APP_NAME }) {
-            return true
+        return FirebaseApp.getApps(this).any {
+            it.name == FirebaseApp.DEFAULT_APP_NAME
         }
-        return FirebaseApp.initializeApp(this) != null
     }
 
     private fun enableScreenProtection() {

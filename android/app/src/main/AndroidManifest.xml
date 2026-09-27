@@ -8,7 +8,7 @@
 
     <application
         android:label="مسار"
-        android:name="${applicationName}"
+        android:name=".MasarApplication"
         android:usesCleartextTraffic="false"
         tools:replace="android:label">
 
