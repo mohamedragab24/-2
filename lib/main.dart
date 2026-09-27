@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:firebase_core/firebase_core.dart';
 
 import 'app_router.dart';
 import 'theme/app_theme.dart';
@@ -47,9 +46,8 @@ class _MasarAppState extends State<MasarApp> {
       try { deepLinkService.init(router); } catch (_) {}
       screenProtection.init().catchError((_) {});
       NotificationService().init().catchError((_) {});
-      // Firebase Messaging must not be touched until Firebase Core is ready.
-      // Accessing FirebaseMessaging.instance too early can throw
-      // [core/no-app] and leave a release build on a blank screen.
+      // Firebase Messaging must not be touched until the Firebase bootstrap
+      // controller reports that native Firebase is ready.
       _initMessagingSafely();
       _checkForUpdate();
     });
@@ -62,10 +60,10 @@ class _MasarAppState extends State<MasarApp> {
     try {
       // Wait briefly for Firebase bootstrap, but never block the UI.
       for (var i = 0; i < 20; i++) {
-        if (Firebase.apps.isNotEmpty) break;
+        if (firebaseBootstrap.ready.value) break;
         await Future<void>.delayed(const Duration(milliseconds: 250));
       }
-      if (!mounted || Firebase.apps.isEmpty) return;
+      if (!mounted || !firebaseBootstrap.ready.value) return;
 
       try {
         FirebaseMessaging.onMessageOpenedApp.listen((message) {

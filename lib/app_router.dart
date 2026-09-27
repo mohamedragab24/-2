@@ -1,5 +1,4 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:go_router/go_router.dart';
 
 import 'screens/splash_screen.dart';
@@ -23,7 +22,7 @@ GoRouter buildRouter() {
     initialLocation: '/',
     refreshListenable: firebaseBootstrap.ready,
     redirect: (context, state) {
-      final firebaseReady = firebaseBootstrap.ready.value && Firebase.apps.isNotEmpty;
+      final firebaseReady = firebaseBootstrap.ready.value;
       final loggedIn = firebaseReady && FirebaseAuth.instance.currentUser != null;
       final loggingInRoutes = ['/login', '/signup', '/forgot-password', '/', '/verify-email'];
 

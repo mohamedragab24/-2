@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import '../services/firebase_bootstrap.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
@@ -24,7 +23,7 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
 
-    if (FirebaseBootstrap.instance.ready.value && Firebase.apps.isNotEmpty) {
+    if (FirebaseBootstrap.instance.ready.value && firebaseBootstrap.ready.value) {
       final loggedIn = FirebaseAuth.instance.currentUser != null;
       context.go(loggedIn ? '/home' : '/login');
     } else {
