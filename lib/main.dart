@@ -45,7 +45,6 @@ class _MasarAppState extends State<MasarApp> {
       if (!mounted) return;
       try { deepLinkService.init(router); } catch (_) {}
       screenProtection.init().catchError((_) {});
-      NotificationService().init().catchError((_) {});
       // Firebase Messaging must not be touched until the Firebase bootstrap
       // controller reports that native Firebase is ready.
       _initMessagingSafely();
@@ -64,6 +63,10 @@ class _MasarAppState extends State<MasarApp> {
         await Future<void>.delayed(const Duration(milliseconds: 250));
       }
       if (!mounted || !FirebaseBootstrap.instance.ready.value) return;
+
+      try {
+        await NotificationService().init();
+      } catch (_) {}
 
       try {
         FirebaseMessaging.onMessageOpenedApp.listen((message) {

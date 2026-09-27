@@ -23,7 +23,17 @@ GoRouter buildRouter() {
     refreshListenable: firebaseBootstrap.ready,
     redirect: (context, state) {
       final firebaseReady = firebaseBootstrap.ready.value;
-      final loggedIn = firebaseReady && FirebaseAuth.instance.currentUser != null;
+      User? currentUser;
+      if (firebaseReady) {
+        try {
+          currentUser = FirebaseAuth.instance.currentUser;
+        } catch (_) {
+          // Firebase Auth plugin may still be attaching. Treat the user as
+          // signed out for routing and let the login screen retry safely.
+          currentUser = null;
+        }
+      }
+      final loggedIn = currentUser != null;
       final loggingInRoutes = ['/login', '/signup', '/forgot-password', '/', '/verify-email'];
 
       if (!firebaseReady) {
@@ -34,7 +44,7 @@ GoRouter buildRouter() {
         return null;
       }
 
-      if (loggedIn && FirebaseAuth.instance.currentUser?.emailVerified == false && state.matchedLocation != '/verify-email') {
+      if (loggedIn && currentUser?.emailVerified == false && state.matchedLocation != '/verify-email') {
         return '/verify-email';
       }
 

@@ -3,6 +3,7 @@ package com.Fahmani
 import android.os.Bundle
 import android.view.WindowManager
 import android.app.Activity
+import android.content.Context
 import android.app.Application
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -11,6 +12,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private val channelName = "masar_app/screen_protection"
+    private val firebaseChannelName = "masar_app/firebase"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,6 +34,22 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
+            firebaseChannelName
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "ensureInitialized" -> {
+                    try {
+                        result.success(ensureNativeFirebase())
+                    } catch (e: Exception) {
+                        result.error("FIREBASE_NATIVE_INIT", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
             channelName
         ).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -48,6 +66,26 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+
+    /**
+     * Initialize FirebaseApp natively without using FlutterFire's
+     * Firebase.initializeApp() platform channel. Reflection is intentional: it
+     * keeps this activity independent from a direct FirebaseApp import while
+     * still using the Firebase SDK packaged by the FlutterFire plugins.
+     */
+    private fun ensureNativeFirebase(): Boolean {
+        val firebaseAppClass = Class.forName("com.google.firebase.FirebaseApp")
+        val getApps = firebaseAppClass.getMethod("getApps", Context::class.java)
+        val apps = getApps.invoke(null, this) as? List<*>
+        if (!apps.isNullOrEmpty()) return true
+
+        val initializeApp = firebaseAppClass.getMethod(
+            "initializeApp",
+            Context::class.java
+        )
+        return initializeApp.invoke(null, this) != null
     }
 
     private fun enableScreenProtection() {
