@@ -23,7 +23,7 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
 
-    if (FirebaseBootstrap.instance.ready.value && firebaseBootstrap.ready.value) {
+    if (FirebaseBootstrap.instance.ready.value && FirebaseBootstrap.instance.ready.value) {
       final loggedIn = FirebaseAuth.instance.currentUser != null;
       context.go(loggedIn ? '/home' : '/login');
     } else {

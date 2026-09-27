@@ -60,10 +60,10 @@ class _MasarAppState extends State<MasarApp> {
     try {
       // Wait briefly for Firebase bootstrap, but never block the UI.
       for (var i = 0; i < 20; i++) {
-        if (firebaseBootstrap.ready.value) break;
+        if (FirebaseBootstrap.instance.ready.value) break;
         await Future<void>.delayed(const Duration(milliseconds: 250));
       }
-      if (!mounted || !firebaseBootstrap.ready.value) return;
+      if (!mounted || !FirebaseBootstrap.instance.ready.value) return;
 
       try {
         FirebaseMessaging.onMessageOpenedApp.listen((message) {
