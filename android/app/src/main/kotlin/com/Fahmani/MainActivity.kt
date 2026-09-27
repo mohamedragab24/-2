@@ -3,6 +3,7 @@ package com.Fahmani
 import android.os.Bundle
 import android.view.WindowManager
 import android.app.Activity
+import android.content.Context
 import android.app.Application
 import com.google.firebase.FirebaseApp
 import io.flutter.embedding.android.FlutterActivity
@@ -70,15 +71,15 @@ class MainActivity : FlutterActivity() {
 
 
     /**
-     * Ensure the native default FirebaseApp exists.
-     *
-     * FirebaseInitProvider normally creates it before MainActivity starts.
-     * Calling initializeApp() again is safe: Firebase returns the existing
-     * default app when it has already been created. This intentionally avoids
-     * reflection because R8 can rename FirebaseApp/getApps in release builds,
-     * which caused the previous V33 failure.
+     * Ensure the Android Firebase default app exists.
+     * google-services.json + FirebaseInitProvider normally initialize it before
+     * the Flutter engine; the explicit check also makes startup deterministic.
      */
     private fun ensureNativeFirebase(): Boolean {
+        val apps = FirebaseApp.getApps(this)
+        if (apps.any { it.name == FirebaseApp.DEFAULT_APP_NAME }) {
+            return true
+        }
         return FirebaseApp.initializeApp(this) != null
     }
 

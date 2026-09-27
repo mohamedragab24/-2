@@ -1,13 +1,8 @@
-# Firebase fix V34
+# Firebase Android Fix V34
 
-## Root cause found in V33
-V33 used Kotlin reflection:
-`Class.forName("com.google.firebase.FirebaseApp")` and `getMethod("getApps", Context::class.java)`.
-Release builds can obfuscate/rename methods, so reflection can fail with an error resembling `...FirebaseApp.getApps(Context)...`.
-
-## V34 fix
-- Added an explicit native Firebase App dependency using Firebase BoM 33.5.1.
-- Replaced reflection with the direct `FirebaseApp.initializeApp(this)` API.
-- `FirebaseInitProvider` can initialize the default app before MainActivity; calling `initializeApp` then safely reuses the existing default app.
-- Dart still does NOT call `Firebase.initializeApp()` on Android, avoiding the previous FlutterFire channel-error path.
-- Auth/Firestore/Messaging continue to use the native Firebase default app through FlutterFire plugins after readiness.
+- Fixed release Gradle failure caused by `com.google.firebase:firebase-app:` having no version.
+- Added Firebase Android BOM `33.5.1` and `firebase-app` with the BOM-managed version.
+- Replaced reflection-based `FirebaseApp` lookup with the direct Firebase Android SDK API.
+- `google-services.json` remains the Android Firebase configuration.
+- Dart still avoids `Firebase.initializeApp()` on Android; FlutterFire Core is used on iOS.
+- This addresses the runtime `Firebase native init ... FirebaseApp ...` failure from V33 and the release dependency resolution failure.
