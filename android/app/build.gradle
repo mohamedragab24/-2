@@ -14,6 +14,11 @@ configurations.all {
 }
 
 dependencies {
+    // Keep Firebase App available to the Android host so Firebase can be
+    // initialized natively without depending on FlutterFire's Dart channel.
+    implementation platform("com.google.firebase:firebase-bom:33.5.1")
+    implementation "com.google.firebase:firebase-app"
+
     // Giphy SDK 2.3.17 references Kotlin Parcelize runtime classes during R8.
     // Keep the runtime explicitly available to release builds.
     implementation "org.jetbrains.kotlin:kotlin-parcelize-runtime:1.9.24"

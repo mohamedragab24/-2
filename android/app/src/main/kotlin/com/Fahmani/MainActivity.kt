@@ -3,8 +3,8 @@ package com.Fahmani
 import android.os.Bundle
 import android.view.WindowManager
 import android.app.Activity
-import android.content.Context
 import android.app.Application
+import com.google.firebase.FirebaseApp
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -70,22 +70,16 @@ class MainActivity : FlutterActivity() {
 
 
     /**
-     * Initialize FirebaseApp natively without using FlutterFire's
-     * Firebase.initializeApp() platform channel. Reflection is intentional: it
-     * keeps this activity independent from a direct FirebaseApp import while
-     * still using the Firebase SDK packaged by the FlutterFire plugins.
+     * Ensure the native default FirebaseApp exists.
+     *
+     * FirebaseInitProvider normally creates it before MainActivity starts.
+     * Calling initializeApp() again is safe: Firebase returns the existing
+     * default app when it has already been created. This intentionally avoids
+     * reflection because R8 can rename FirebaseApp/getApps in release builds,
+     * which caused the previous V33 failure.
      */
     private fun ensureNativeFirebase(): Boolean {
-        val firebaseAppClass = Class.forName("com.google.firebase.FirebaseApp")
-        val getApps = firebaseAppClass.getMethod("getApps", Context::class.java)
-        val apps = getApps.invoke(null, this) as? List<*>
-        if (!apps.isNullOrEmpty()) return true
-
-        val initializeApp = firebaseAppClass.getMethod(
-            "initializeApp",
-            Context::class.java
-        )
-        return initializeApp.invoke(null, this) != null
+        return FirebaseApp.initializeApp(this) != null
     }
 
     private fun enableScreenProtection() {
