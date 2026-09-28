@@ -4,8 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../firebase_options.dart';
 
-/// Coordinates Firebase startup without calling FlutterFire Core on Android.
-/// Android initializes the native FirebaseApp first through MainActivity.
+/// Coordinates Firebase startup.
+///
+/// IMPORTANT: FlutterFire keeps its own Dart-side registry of Firebase apps.
+/// Even when the native Android FirebaseApp already exists (created by
+/// google-services / MasarApplication), `FirebaseAuth.instance` and the other
+/// plugins throw `[core/no-app] No Firebase App '[DEFAULT]' has been created`
+/// until `Firebase.initializeApp()` has been called once from Dart. So Dart
+/// initialization must run on Android as well.
 class FirebaseBootstrap {
   FirebaseBootstrap._();
   static final FirebaseBootstrap instance = FirebaseBootstrap._();
@@ -13,50 +19,81 @@ class FirebaseBootstrap {
   static const MethodChannel _nativeChannel =
       MethodChannel('masar_app/firebase');
 
+  static const Duration _stepTimeout = Duration(seconds: 10);
+
   final ValueNotifier<bool> ready = ValueNotifier<bool>(false);
   final ValueNotifier<String?> error = ValueNotifier<String?>(null);
   Future<void>? _running;
 
   Future<void> start() {
     if (ready.value) return Future<void>.value();
-    return _running ??= _start();
+    return _running ??= _start().whenComplete(() {
+      // Allow a later attempt (e.g. from the login button) to retry.
+      if (!ready.value) _running = null;
+    });
   }
 
   Future<void> _start() async {
     try {
       if (defaultTargetPlatform == TargetPlatform.android) {
-        Object? lastError;
-        for (var attempt = 0; attempt < 8; attempt++) {
-          try {
-            final result = await _nativeChannel
-                .invokeMethod<bool>('ensureInitialized')
-                .timeout(const Duration(seconds: 3));
-            if (result == true) {
-              ready.value = true;
-              error.value = null;
-              return;
-            }
-            lastError = 'Native FirebaseApp was not initialized.';
-          } catch (e) {
-            lastError = e;
-          }
-          await Future<void>.delayed(const Duration(milliseconds: 300));
-        }
-        throw StateError('تعذر تهيئة Firebase على Android: $lastError');
+        await _confirmNativeApp();
       }
-
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      ).timeout(const Duration(seconds: 15));
-      ready.value = true;
+      await _initializeFlutterFire();
       error.value = null;
+      ready.value = true;
     } catch (e) {
       error.value = e.toString();
       ready.value = false;
-      // Allow a later login attempt to retry startup instead of keeping a
-      // permanently completed/failed Future.
-      _running = null;
     }
+  }
+
+  /// Best effort: checks that the native Android default app exists.
+  /// Never fatal — if it is missing, the Dart initialization below creates it
+  /// from DefaultFirebaseOptions.
+  Future<void> _confirmNativeApp() async {
+    for (var attempt = 0; attempt < 5; attempt++) {
+      try {
+        final result = await _nativeChannel
+            .invokeMethod<bool>('ensureInitialized')
+            .timeout(const Duration(seconds: 3));
+        if (result == true) return;
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+  }
+
+  /// Registers the default app in FlutterFire's Dart registry, retrying on
+  /// transient platform-channel failures.
+  Future<void> _initializeFlutterFire() async {
+    Object? lastError;
+    for (var attempt = 0; attempt < 6; attempt++) {
+      try {
+        await _initializeOnce();
+        return;
+      } catch (e) {
+        lastError = e;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
+    throw StateError('تعذر تهيئة Firebase: $lastError');
+  }
+
+  Future<void> _initializeOnce() async {
+    try {
+      // Uses the native default app (google-services.json / plist).
+      await Firebase.initializeApp().timeout(_stepTimeout);
+    } catch (_) {
+      // No native default app yet: create it from explicit options.
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        ).timeout(_stepTimeout);
+      } on FirebaseException catch (e) {
+        if (e.code != 'duplicate-app') rethrow;
+      }
+    }
+    // Throws core/no-app if the Dart registry still has no default app.
+    Firebase.app();
   }
 
   Future<bool> waitUntilReady({
@@ -64,26 +101,17 @@ class FirebaseBootstrap {
   }) async {
     if (ready.value) return true;
 
-    final completer = Completer<bool>();
-    Timer? timer;
-
-    void listener() {
-      if (ready.value && !completer.isCompleted) {
-        completer.complete(true);
-      }
+    final deadline = DateTime.now().add(timeout);
+    while (!ready.value) {
+      final remaining = deadline.difference(DateTime.now());
+      if (remaining <= Duration.zero) break;
+      try {
+        await start().timeout(remaining);
+      } catch (_) {}
+      if (ready.value) break;
+      await Future<void>.delayed(const Duration(seconds: 1));
     }
-
-    ready.addListener(listener);
-    unawaited(start());
-
-    timer = Timer(timeout, () {
-      if (!completer.isCompleted) completer.complete(false);
-    });
-
-    final result = await completer.future;
-    ready.removeListener(listener);
-    timer.cancel();
-    return result;
+    return ready.value;
   }
 
   String get lastError => error.value ?? '';

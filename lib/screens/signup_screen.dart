@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -158,7 +159,18 @@ class _SignupScreenState extends State<SignupScreen> {
               TextField(controller: _passCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'كلمة المرور')),
               if (_error != null) ...[
                 const SizedBox(height: 10),
-                Text(_error!, style: const TextStyle(color: AppColors.coral, fontSize: 12.5)),
+                SelectableText(_error!, style: const TextStyle(color: AppColors.coral, fontSize: 12.5)),
+                TextButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: _error!));
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('تم نسخ الخطأ')),
+                    );
+                  },
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('نسخ الخطأ'),
+                ),
               ],
               const SizedBox(height: 20),
               ElevatedButton(

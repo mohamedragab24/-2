@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -268,12 +269,29 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: AppColors.coral.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(
-                      color: AppColors.coral,
-                      fontSize: 12.5,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SelectableText(
+                        _error!,
+                        style: const TextStyle(
+                          color: AppColors.coral,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextButton.icon(
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: _error!));
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('تم نسخ الخطأ')),
+                          );
+                        },
+                        icon: const Icon(Icons.copy, size: 16),
+                        label: const Text('نسخ الخطأ'),
+                      ),
+                    ],
                   ),
                 ),
               ],

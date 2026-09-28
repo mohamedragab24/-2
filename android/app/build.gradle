@@ -49,6 +49,10 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.debug
+            // R8 shrinking can strip FlutterFire's platform-channel classes in
+            // release builds and cause "channel-error" on Firebase startup.
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }
