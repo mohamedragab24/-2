@@ -75,7 +75,16 @@ class FirebaseBootstrap {
         await Future<void>.delayed(const Duration(milliseconds: 500));
       }
     }
-    throw StateError('تعذر تهيئة Firebase: $lastError');
+    var diagnostics = '';
+    try {
+      diagnostics = await _nativeChannel
+              .invokeMethod<String>('diagnostics')
+              .timeout(const Duration(seconds: 3)) ??
+          '';
+    } catch (e) {
+      diagnostics = 'diagnostics-unavailable: $e';
+    }
+    throw StateError('تعذر تهيئة Firebase: $lastError | native: $diagnostics');
   }
 
   Future<void> _initializeOnce() async {

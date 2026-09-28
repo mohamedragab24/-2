@@ -12,3 +12,9 @@ Dart-side registry of apps, so even with a native default app, `FirebaseAuth.ins
 - `android/app/build.gradle`: release build no longer minifies/shrinks (R8 can strip FlutterFire
   channel classes, which was the likely source of the old `channel-error`).
 - `signup_screen.dart`: waits for Firebase and shows real error messages.
+
+## V37b
+- `MainActivity.kt`: explicitly (idempotently) re-runs `GeneratedPluginRegistrant` and makes sure the
+  `firebase_core` plugin is attached to the engine; the result is exposed to Dart as diagnostics and
+  appended to the startup error message.
+- CI: `flutter build apk --release --no-shrink` in both workflows (R8 fully off).

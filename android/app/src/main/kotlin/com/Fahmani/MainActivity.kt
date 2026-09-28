@@ -32,6 +32,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        ensurePlugins(flutterEngine)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -45,6 +46,7 @@ class MainActivity : FlutterActivity() {
                         result.error("FIREBASE_NATIVE_INIT", e.message, null)
                     }
                 }
+                "diagnostics" -> result.success(pluginReport)
                 else -> result.notImplemented()
             }
         }
@@ -69,6 +71,48 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+
+    @Volatile
+    private var pluginReport: String = "not-run"
+
+    /**
+     * Guarantees that the FlutterFire plugins are attached to this engine.
+     * The automatic registration can silently fail (it only logs), which makes
+     * every plugin channel fail with "channel-error". Registration is
+     * idempotent (already-registered plugins are skipped), so it is safe to
+     * repeat here. Reflection is used so this can never break compilation, and
+     * the outcome is reported to Dart to make any remaining failure visible.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun ensurePlugins(engine: FlutterEngine) {
+        val notes = StringBuilder()
+
+        try {
+            Class.forName("io.flutter.plugins.GeneratedPluginRegistrant")
+                .getMethod("registerWith", FlutterEngine::class.java)
+                .invoke(null, engine)
+            notes.append("registrant=ok; ")
+        } catch (t: Throwable) {
+            val cause = t.cause ?: t
+            notes.append("registrant=${cause.javaClass.simpleName}:${cause.message}; ")
+        }
+
+        try {
+            val cls = Class.forName("io.flutter.plugins.firebase.core.FlutterFirebaseCorePlugin")
+                as Class<out io.flutter.embedding.engine.plugins.FlutterPlugin>
+            if (engine.plugins.has(cls)) {
+                notes.append("firebase_core=registered; ")
+            } else {
+                engine.plugins.add(cls.getDeclaredConstructor().newInstance())
+                notes.append("firebase_core=added-manually; ")
+            }
+        } catch (t: Throwable) {
+            val cause = t.cause ?: t
+            notes.append("firebase_core=${cause.javaClass.simpleName}:${cause.message}; ")
+        }
+
+        pluginReport = notes.toString()
+    }
 
     /**
      * Ensure the Android Firebase default app exists.
