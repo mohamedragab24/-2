@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'home_tab.dart';
-import 'courses_tab.dart';
 import 'my_courses_tab.dart';
-import 'favorites_tab.dart';
-import 'notifications_tab.dart';
 import 'meetings_tab.dart';
 import 'account_tab.dart';
 import '../theme/app_theme.dart';
@@ -21,10 +18,7 @@ class _HomeShellState extends State<HomeShell> {
 
   final List<Widget> _tabs = const [
     HomeTab(),
-    CoursesTab(),
     MyCoursesTab(),
-    FavoritesTab(),
-    NotificationsTab(),
     MeetingsTab(),
     AccountTab(),
   ];
@@ -49,47 +43,10 @@ class _HomeShellState extends State<HomeShell> {
         indicatorColor: AppColors.emeraldLight,
 
         destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'الرئيسية',
-          ),
-
-          NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book),
-            label: 'الكورسات',
-          ),
-
-          NavigationDestination(
-            icon: Icon(Icons.school_outlined),
-            selectedIcon: Icon(Icons.school),
-            label: 'كورساتي',
-          ),
-
-          NavigationDestination(
-            icon: Icon(Icons.favorite_border),
-            selectedIcon: Icon(Icons.favorite),
-            label: 'المفضلة',
-          ),
-
-          NavigationDestination(
-            icon: Icon(Icons.notifications_none),
-            selectedIcon: Icon(Icons.notifications),
-            label: 'الإشعارات',
-          ),
-
-          NavigationDestination(
-            icon: Icon(Icons.video_camera_front_outlined),
-            selectedIcon: Icon(Icons.video_camera_front),
-            label: 'المحاضرات',
-          ),
-
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'حسابي',
-          ),
+          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'الرئيسية'),
+          NavigationDestination(icon: Icon(Icons.school_outlined), selectedIcon: Icon(Icons.school), label: 'كورساتي'),
+          NavigationDestination(icon: Icon(Icons.video_camera_front_outlined), selectedIcon: Icon(Icons.video_camera_front), label: 'المحاضرات'),
+          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'حسابي'),
         ],
       ),
     );

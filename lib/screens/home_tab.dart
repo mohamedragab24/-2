@@ -50,7 +50,7 @@ class HomeTab extends StatelessWidget {
                           ],
                         ),
                       ),
-                      IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none)),
+                      IconButton(onPressed: () => context.push('/notifications'), icon: const Icon(Icons.notifications_none)),
                     ],
                   ),
                 ),

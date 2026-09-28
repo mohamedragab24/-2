@@ -8,6 +8,10 @@ class UserProfile {
   final String role;
   final String mode;
   final bool isAdmin;
+  final String bio;
+  final double rating;
+  final int followersCount;
+  final int followingCount;
 
   UserProfile({
     required this.uid,
@@ -19,6 +23,10 @@ class UserProfile {
     this.role = 'student',
     this.mode = 'mostafhem',
     this.isAdmin = false,
+    this.bio = '',
+    this.rating = 0,
+    this.followersCount = 0,
+    this.followingCount = 0,
   });
 
   bool get isMofahhem => mode == 'mofahhem';
@@ -35,6 +43,10 @@ class UserProfile {
       role: (map['role'] ?? 'student').toString(),
       mode: rawMode == 'mofahhem' ? 'mofahhem' : 'mostafhem',
       isAdmin: map['isAdmin'] == true || (map['role'] ?? '').toString() == 'admin',
+      bio: (map['bio'] ?? '').toString(),
+      rating: (map['rating'] is num ? (map['rating'] as num).toDouble() : double.tryParse((map['rating'] ?? '0').toString()) ?? 0),
+      followersCount: (map['followersCount'] is num ? (map['followersCount'] as num).toInt() : 0),
+      followingCount: (map['followingCount'] is num ? (map['followingCount'] as num).toInt() : 0),
     );
   }
 

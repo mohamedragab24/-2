@@ -92,6 +92,11 @@ class FirestoreService {
     return courses;
   }
 
+  Future<List<Lesson>> getLessons(String courseId) async {
+    final snap = await _db.collection('courses').doc(courseId).collection('lessons').orderBy('order').get();
+    return snap.docs.map((d) => Lesson.fromMap(d.id, courseId, d.data())).toList();
+  }
+
   Stream<List<Lesson>> watchLessons(String courseId) {
     return _db
         .collection('courses')

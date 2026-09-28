@@ -28,138 +28,50 @@ class MyCoursesTab extends StatelessWidget {
         title: const Text('كورساتي'),
         centerTitle: true,
       ),
-      body: StreamBuilder<List<String>>(
-        stream: service.watchMyCourseIds(user.uid),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
-          final ids = snapshot.data ?? [];
-
-          if (ids.isEmpty) {
-            return const _EmptyCourses();
-          }
-
-          return FutureBuilder<List<Course>>(
-            future: service.getCoursesByIds(ids),
-            builder: (context, courseSnapshot) {
-              if (courseSnapshot.connectionState ==
-                  ConnectionState.waiting) {
-                return const Center(
-                  child: CircularProgressIndicator(),
+      body: DefaultTabController(
+        length: 2,
+        child: Column(children: [
+          const TabBar(tabs: [Tab(text: 'كورساتي'), Tab(text: 'المفضلة')]),
+          Expanded(child: TabBarView(children: [
+            StreamBuilder<List<String>>(
+              stream: service.watchMyCourseIds(user.uid),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                final ids = snapshot.data ?? [];
+                if (ids.isEmpty) return const _EmptyCourses();
+                return FutureBuilder<List<Course>>(
+                  future: service.getCoursesByIds(ids),
+                  builder: (context, courseSnapshot) {
+                    if (courseSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                    final courses = courseSnapshot.data ?? [];
+                    if (courses.isEmpty) return const _EmptyCourses();
+                    return ListView.separated(
+                      padding: const EdgeInsets.all(16), itemCount: courses.length, separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) { final course = courses[index]; return Card(clipBehavior: Clip.antiAlias, child: InkWell(onTap: () => context.push('/course/${course.id}'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        SizedBox(width: double.infinity, height: 180, child: course.thumbnailUrl.isEmpty ? Container(color: AppColors.emeraldLight, child: const Icon(Icons.menu_book, size: 60)) : Image.network(course.thumbnailUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: AppColors.emeraldLight, child: const Icon(Icons.menu_book, size: 60)))),
+                        Padding(padding: const EdgeInsets.all(14), child: Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(course.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)), const SizedBox(height: 8), Text(course.instructorName, style: const TextStyle(color: AppColors.muted)), const SizedBox(height: 8), Text('${course.lessonsCount} درس', style: const TextStyle(color: AppColors.muted))])), const Icon(Icons.play_circle_outline)])
+                      ]))); },
+                    );
+                  },
                 );
-              }
-
-              final courses = courseSnapshot.data ?? [];
-
-              if (courses.isEmpty) {
-                return const _EmptyCourses();
-              }
-
-              return ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: courses.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final course = courses[index];
-
-                  return Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () {
-                        context.push('/course/${course.id}');
-                      },
-                      child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: double.infinity,
-                            height: 180,
-                            child: course.thumbnailUrl.isEmpty
-                                ? Container(
-                                    color:
-                                        AppColors.emeraldLight,
-                                    child: const Icon(
-                                      Icons.menu_book,
-                                      size: 60,
-                                    ),
-                                  )
-                                : Image.network(
-                                    course.thumbnailUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (_, __, ___) {
-                                      return Container(
-                                        color: AppColors
-                                            .emeraldLight,
-                                        child: const Icon(
-                                          Icons.menu_book,
-                                          size: 60,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                          ),
-                          Padding(
-                            padding:
-                                const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  course.title,
-                                  style: const TextStyle(
-                                    fontSize: 17,
-                                    fontWeight:
-                                        FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  course.instructorName,
-                                  style: const TextStyle(
-                                    color: AppColors.muted,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.play_circle_outline,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '${course.lessonsCount} درس',
-                                    ),
-                                    const Spacer(),
-                                    const Icon(
-                                      Icons.arrow_forward_ios,
-                                      size: 16,
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          );
-        },
+              },
+            ),
+            StreamBuilder<List<String>>(
+              stream: service.watchFavoriteIds(user.uid),
+              builder: (context, snapshot) {
+                final ids = snapshot.data ?? [];
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                if (ids.isEmpty) return const Center(child: Text('لا توجد كورسات مفضلة بعد'));
+                return FutureBuilder<List<Course>>(future: service.getCoursesByIds(ids), builder: (context, snap) {
+                  final courses = snap.data ?? [];
+                  if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                  return ListView.separated(padding: const EdgeInsets.all(16), itemCount: courses.length, separatorBuilder: (_, __) => const SizedBox(height: 10), itemBuilder: (_, i) => ListTile(tileColor: Colors.white, leading: SizedBox(width: 64, height: 48, child: Image.network(courses[i].thumbnailUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.menu_book))), title: Text(courses[i].title, style: const TextStyle(fontWeight: FontWeight.bold)), subtitle: Text(courses[i].instructorName), trailing: const Icon(Icons.chevron_left), onTap: () => context.push('/course/${courses[i].id}')));
+                });
+              },
+            ),
+          ])),
+        ]),
       ),
-    );
-  }
 }
 
 class _EmptyCourses extends StatelessWidget {

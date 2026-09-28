@@ -4,6 +4,7 @@ class Course {
   final String title;
   final String description;
   final String instructorName;
+  final String instructorId;
   final String category;
   final String thumbnailUrl;
   final double price;
@@ -18,6 +19,7 @@ class Course {
     required this.title,
     required this.description,
     required this.instructorName,
+    required this.instructorId,
     required this.category,
     required this.thumbnailUrl,
     required this.price,
@@ -51,8 +53,8 @@ class Course {
       title: (map['title'] ?? map['name'] ?? '').toString(),
       description: (map['description'] ?? '').toString(),
 
-      instructorName:
-          (map['instructorName'] ?? map['instructor'] ?? '').toString(),
+      instructorName: (map['instructorName'] ?? map['instructor'] ?? '').toString(),
+      instructorId: (map['instructorId'] ?? map['ownerUid'] ?? map['mufhemId'] ?? '').toString(),
 
       category: (map['category'] ?? '').toString(),
 

@@ -11,6 +11,7 @@ import 'screens/lesson_player_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/change_password_screen.dart';
 import 'screens/meeting_screen.dart';
+import 'screens/notifications_tab.dart';
 import 'screens/admin_control_center_screen.dart';
 import 'screens/verify_email_screen.dart';
 import 'services/firebase_bootstrap.dart';
@@ -71,6 +72,7 @@ GoRouter buildRouter() {
           initialLessonNumber: int.tryParse(state.uri.queryParameters['lesson'] ?? '') ?? 1,
         ),
       ),
+      GoRoute(path: '/notifications', builder: (context, state) => const NotificationsTab()),
       GoRoute(path: '/admin', builder: (context, state) => const AdminDashboardScreen()),
       GoRoute(path: '/admin-control', builder: (context, state) => const AdminControlCenterScreen()),
       GoRoute(path: '/meeting/:requestId', builder: (context, state) => MeetingScreen(requestId: state.pathParameters['requestId']!)),

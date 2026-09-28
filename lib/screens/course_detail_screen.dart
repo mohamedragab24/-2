@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/firestore_service.dart';
 import '../models/course.dart';
 import '../models/lesson.dart';
+import '../models/user_profile.dart';
 import '../theme/app_theme.dart';
 
 class CourseDetailScreen extends StatefulWidget {
@@ -18,6 +20,8 @@ class CourseDetailScreen extends StatefulWidget {
 
 class _CourseDetailScreenState extends State<CourseDetailScreen> {
   bool _openedInitialLesson = false;
+  bool _openedPurchasedLesson = false;
+  bool _following = false;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +40,15 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             future: uid == null ? Future.value(false) : firestore.hasPurchased(uid, widget.courseId),
             builder: (context, purchasedSnap) {
               final purchased = purchasedSnap.data ?? false;
+              if (purchased && !_openedPurchasedLesson && widget.initialLessonNumber <= 1) {
+                _openedPurchasedLesson = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  if (!mounted) return;
+                  final lessons = await firestore.getLessons(widget.courseId);
+                  if (!mounted || lessons.isEmpty) return;
+                  context.push('/course/${widget.courseId}/lesson/${lessons.first.id}');
+                });
+              }
               return CustomScrollView(
                 slivers: [
                   SliverAppBar(
@@ -74,6 +87,42 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                                   Expanded(child: Text(f, style: const TextStyle(fontSize: 13))),
                                 ]),
                               )),
+                          const SizedBox(height: 20),
+                          if (course.instructorId.isNotEmpty)
+                            StreamBuilder<UserProfile?>(
+                              stream: firestore.watchUserProfile(course.instructorId),
+                              builder: (context, ps) {
+                                final teacher = ps.data;
+                                if (teacher == null) return const SizedBox.shrink();
+                                return Card(
+                                  margin: EdgeInsets.zero,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: Row(children: [
+                                      CircleAvatar(radius: 28, backgroundImage: teacher.photoUrl.isNotEmpty ? NetworkImage(teacher.photoUrl) : null, child: teacher.photoUrl.isEmpty ? Text(teacher.name.isNotEmpty ? teacher.name[0] : 'م') : null),
+                                      const SizedBox(width: 12),
+                                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                        Text(teacher.name.isEmpty ? course.instructorName : teacher.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                        const SizedBox(height: 3),
+                                        Text(teacher.bio.isEmpty ? 'مُفهّم ناشر الكورس' : teacher.bio, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.muted, fontSize: 11.5)),
+                                        const SizedBox(height: 5),
+                                        StreamBuilder<QuerySnapshot<Map<String,dynamic>>>(
+                                          stream: FirebaseFirestore.instance.collection('users').doc(course.instructorId).collection('followers').snapshots(),
+                                          builder: (_, fs) => Text('${fs.data?.docs.length ?? 0} متابع  •  تقييم ${teacher.rating.toStringAsFixed(1)}', style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+                                        ),
+                                      ])),
+                                      FilledButton.tonal(onPressed: () async {
+                                        final me = FirebaseAuth.instance.currentUser;
+                                        if (me == null || me.uid == course.instructorId) return;
+                                        final ref = FirebaseFirestore.instance.collection('users').doc(course.instructorId).collection('followers').doc(me.uid);
+                                        if (_following) { await ref.delete(); } else { await ref.set({'uid': me.uid, 'createdAt': FieldValue.serverTimestamp()}); }
+                                        if (mounted) setState(() => _following = !_following);
+                                      }, child: Text(_following ? 'متابَع' : 'متابعة')),
+                                    ]),
+                                  ),
+                                );
+                              },
+                            ),
                           const SizedBox(height: 20),
                           Text('محتوى الكورس', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: 16.5)),
                           StreamBuilder<List<Lesson>>(
