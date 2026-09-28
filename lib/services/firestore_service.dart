@@ -323,6 +323,11 @@ class FirestoreService {
     });
   }
 
+  Future<Map<String, dynamic>> getRemoteSettings() async {
+    final doc = await _db.collection('settings').doc('app').get();
+    return doc.data() ?? {};
+  }
+
   // ==================== PROGRESS ====================
 
   String _progressId(

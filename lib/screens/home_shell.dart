@@ -15,6 +15,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  int _refreshNonce = 0;
 
   final List<Widget> _tabs = const [
     HomeTab(),
@@ -28,20 +29,18 @@ class _HomeShellState extends State<HomeShell> {
     return Scaffold(
       body: IndexedStack(
         index: _index,
-        children: _tabs,
+        children: _tabs.map((tab) => KeyedSubtree(
+          key: ValueKey('$_refreshNonce-${tab.runtimeType}'),
+          child: tab,
+        )).toList(),
       ),
-
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (index) {
-          setState(() {
-            _index = index;
-          });
+          setState(() => _index = index);
         },
-
         backgroundColor: AppColors.white,
         indicatorColor: AppColors.emeraldLight,
-
         destinations: const [
           NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'الرئيسية'),
           NavigationDestination(icon: Icon(Icons.school_outlined), selectedIcon: Icon(Icons.school), label: 'كورساتي'),

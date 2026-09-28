@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'app_router.dart';
 import 'theme/app_theme.dart';
@@ -11,8 +13,24 @@ import 'services/app_update_service.dart';
 import 'services/notification_service.dart';
 import 'services/firebase_bootstrap.dart';
 
+
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await FirebaseBootstrap.instance.waitUntilReady(timeout: const Duration(seconds: 10));
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return;
+  final n = message.notification;
+  await FirebaseFirestore.instance.collection('users').doc(uid).collection('notifications').doc(message.messageId ?? DateTime.now().microsecondsSinceEpoch.toString()).set({
+    'title': n?.title ?? message.data['title'] ?? '',
+    'body': n?.body ?? message.data['body'] ?? '',
+    'imageUrl': message.data['imageUrl'] ?? '',
+    'type': message.data['type'] ?? 'push',
+    'data': message.data, 'read': false, 'createdAt': FieldValue.serverTimestamp(),
+  }, SetOptions(merge: true));
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // The UI must never wait for Firebase. Start the Firebase connection in
   // the background and let the app open immediately.

@@ -8,6 +8,7 @@ import '../services/firestore_service.dart';
 import '../services/video_service.dart';
 import '../models/lesson.dart';
 import '../theme/app_theme.dart';
+import '../services/learning_service.dart';
 
 class LessonPlayerScreen extends StatefulWidget {
   final String courseId;
@@ -29,6 +30,9 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   bool _fullscreen = false;
   String? _error;
   double _speed = 1.0;
+  final _learning = LearningService();
+  static const int _previewLimitSeconds = 120;
+  bool _previewEnded = false;
 
   String get _uid => FirebaseAuth.instance.currentUser!.uid;
 
@@ -70,6 +74,9 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       }
 
       await controller.setPlaybackSpeed(_speed);
+      if (await _isPreviewLesson()) {
+        controller.addListener(_enforcePreviewLimit);
+      }
       await controller.play();
 
       if (!mounted) {
@@ -98,6 +105,39 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
         });
       }
     }
+  }
+
+  Future<bool> _isPreviewLesson() async {
+    final lessons = await _firestore.getLessons(widget.courseId);
+    for (final lesson in lessons) {
+      if (lesson.id == widget.lessonId) return lesson.isPreview;
+    }
+    return false;
+  }
+
+  void _enforcePreviewLimit() {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized || _previewEnded) return;
+    if (c.value.position.inSeconds >= _previewLimitSeconds) {
+      _previewEnded = true;
+      c.pause();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('انتهت المعاينة المجانية. اشترِ الكورس لمتابعة الدرس.')));
+      }
+    }
+  }
+
+  Future<void> _saveBookmark() async {
+    final c = _controller; if (c == null) return;
+    await _learning.saveBookmark(uid: _uid, courseId: widget.courseId, lessonId: widget.lessonId, seconds: c.value.position.inSeconds);
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ العلامة المرجعية')));
+  }
+
+  Future<void> _addNote() async {
+    final c = _controller; if (c == null) return;
+    final controller = TextEditingController();
+    final text = await showDialog<String>(context: context, builder: (_) => AlertDialog(title: const Text('ملاحظة جديدة'), content: TextField(controller: controller, maxLines: 4, decoration: const InputDecoration(hintText: 'اكتب ملاحظتك...')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')), FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('حفظ'))]));
+    if (text != null && text.trim().isNotEmpty) await _learning.saveNote(uid: _uid, courseId: widget.courseId, lessonId: widget.lessonId, seconds: c.value.position.inSeconds, text: text);
   }
 
   Future<void> _saveProgress({bool completed = false}) async {
@@ -211,6 +251,19 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                 ],
               ),
             ),
+            if (!_fullscreen)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    IconButton(onPressed: _saveBookmark, icon: const Icon(Icons.bookmark_add_outlined, color: Colors.white), tooltip: 'حفظ علامة'),
+                    IconButton(onPressed: _addNote, icon: const Icon(Icons.note_add_outlined, color: Colors.white), tooltip: 'إضافة ملاحظة'),
+                    const Spacer(),
+                    IconButton(onPressed: () => _seek(-10), icon: const Icon(Icons.replay_10, color: Colors.white)),
+                    IconButton(onPressed: () => _seek(10), icon: const Icon(Icons.forward_10, color: Colors.white)),
+                  ],
+                ),
+              ),
             if (!_fullscreen)
               Expanded(
                 child: StreamBuilder<List<Lesson>>(

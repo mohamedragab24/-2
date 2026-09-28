@@ -327,33 +327,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 20),
 
-              Center(
-                child: TextButton(
-                  onPressed: _loading
-                      ? null
-                      : () => context.push('/signup'),
-                  child: RichText(
-                    text: const TextSpan(
-                      style: TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 13.5,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: 'ليس لديك حساب؟ ',
-                        ),
-                        TextSpan(
-                          text: 'إنشاء حساب جديد',
-                          style: TextStyle(
-                            color: AppColors.emeraldDark,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
