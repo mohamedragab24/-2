@@ -100,18 +100,63 @@ class MainActivity : FlutterActivity() {
         try {
             val cls = Class.forName("io.flutter.plugins.firebase.core.FlutterFirebaseCorePlugin")
                 as Class<out io.flutter.embedding.engine.plugins.FlutterPlugin>
-            if (engine.plugins.has(cls)) {
-                notes.append("firebase_core=registered; ")
-            } else {
-                engine.plugins.add(cls.getDeclaredConstructor().newInstance())
-                notes.append("firebase_core=added-manually; ")
-            }
+            notes.append(
+                if (engine.plugins.has(cls)) "firebase_core=registered; "
+                else "firebase_core=missing; "
+            )
+            repairFirebaseCore(engine, cls, notes)
         } catch (t: Throwable) {
-            val cause = t.cause ?: t
-            notes.append("firebase_core=${cause.javaClass.simpleName}:${cause.message}; ")
+            notes.append("firebase_core=${describe(t)}; ")
         }
 
         pluginReport = notes.toString()
+    }
+
+    private fun describe(t: Throwable): String {
+        val c = t.cause ?: t
+        return "${c.javaClass.simpleName}:${c.message}@${c.stackTrace.firstOrNull()}"
+    }
+
+    /**
+     * A plugin is stored in the engine's registry BEFORE its onAttachedToEngine
+     * runs, so "registered" does not prove that its Pigeon channel handlers were
+     * installed (an exception during attach is only logged). Re-attach the
+     * plugin, capture any exception, and install the Pigeon handlers directly.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun repairFirebaseCore(
+        engine: FlutterEngine,
+        cls: Class<out io.flutter.embedding.engine.plugins.FlutterPlugin>,
+        notes: StringBuilder,
+    ) {
+        try {
+            engine.plugins.remove(cls)
+            notes.append("core-detached; ")
+        } catch (t: Throwable) {
+            notes.append("core-detach=${describe(t)}; ")
+        }
+        try {
+            engine.plugins.add(cls.getDeclaredConstructor().newInstance())
+            notes.append("core-attached; ")
+        } catch (t: Throwable) {
+            notes.append("core-attach=${describe(t)}; ")
+        }
+
+        val plugin = engine.plugins.get(cls)
+        for (api in listOf("FirebaseCoreHostApi", "FirebaseAppHostApi")) {
+            try {
+                val apiCls = Class.forName(
+                    "io.flutter.plugins.firebase.core.GeneratedAndroidFirebaseCore\$$api"
+                )
+                val setUp = apiCls.declaredMethods.first {
+                    it.name == "setUp" && it.parameterTypes.size == 2
+                }
+                setUp.invoke(null, engine.dartExecutor.binaryMessenger, plugin)
+                notes.append("$api.setUp=ok; ")
+            } catch (t: Throwable) {
+                notes.append("$api.setUp=${describe(t)}; ")
+            }
+        }
     }
 
     /**

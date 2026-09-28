@@ -36,6 +36,22 @@ jobs:
       - name: Flutter Pub Get
         run: flutter pub get
 
+      - name: Record resolved Firebase versions
+        run: |
+          python3 - <<'PY'
+          import re
+          s = open('pubspec.lock').read()
+          names = ['firebase_core','firebase_core_platform_interface','firebase_auth',
+                   'firebase_auth_platform_interface','cloud_firestore','firebase_messaging']
+          out = []
+          for n in names:
+              m = re.search(r'\n  ' + n + r':\n(?:    .*\n)*?    version: "([^"]+)"', s)
+              out.append(n.replace('firebase_','fb_') + '=' + (m.group(1) if m else '?'))
+          open('lib/services/build_versions.dart','w').write(
+              "const String kFirebaseVersions = '" + ', '.join(out) + "';\n")
+          print(', '.join(out))
+          PY
+
       - name: Analyze Dart code
         run: flutter analyze
         continue-on-error: true

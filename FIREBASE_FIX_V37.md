@@ -25,3 +25,12 @@ version mismatch: floating `^` Firebase versions pulled a broken `firebase_core_
 (5.4.1). All Firebase packages are now pinned to one coherent release (firebase_core 3.8.0,
 firebase_auth 5.3.3, cloud_firestore 5.5.0, firebase_storage 12.3.6, cloud_functions 5.1.5,
 firebase_messaging 15.1.5) and `firebase_core_platform_interface` is overridden to 5.4.2.
+
+## V37d
+Same channel-error after pinning, so diagnostics were extended:
+- `MainActivity.kt`: re-attaches the firebase_core plugin (a plugin is stored in the registry before
+  `onAttachedToEngine` runs, so "registered" does not prove its Pigeon handlers exist), captures any
+  exception, and installs the Pigeon handlers directly.
+- `firebase_bootstrap.dart`: on failure also probes the raw Pigeon channel (`handler-missing` vs
+  `handler-present`) and prints the resolved Firebase package versions (`kFirebaseVersions`).
+- CI writes `lib/services/build_versions.dart` from `pubspec.lock` after `flutter pub get`.

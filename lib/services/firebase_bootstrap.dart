@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../firebase_options.dart';
+import 'build_versions.dart';
 
 /// Coordinates Firebase startup.
 ///
@@ -84,7 +85,28 @@ class FirebaseBootstrap {
     } catch (e) {
       diagnostics = 'diagnostics-unavailable: $e';
     }
-    throw StateError('تعذر تهيئة Firebase: $lastError | native: $diagnostics');
+    final probe = await _probeCoreChannel();
+    throw StateError('تعذر تهيئة Firebase: $lastError | native: $diagnostics'
+        ' | probe: $probe | versions: $kFirebaseVersions');
+  }
+
+  /// Sends a raw message to the firebase_core Pigeon channel.
+  /// null reply  -> the native side has no working handler for this channel.
+  /// decode error / value -> a handler exists (Dart/native version mismatch).
+  Future<String> _probeCoreChannel() async {
+    const name =
+        'dev.flutter.pigeon.firebase_core_platform_interface.FirebaseCoreHostApi.initializeCore';
+    try {
+      final reply = await const BasicMessageChannel<Object?>(
+        name,
+        StandardMessageCodec(),
+      ).send(null).timeout(const Duration(seconds: 5));
+      return reply == null
+          ? 'handler-missing(null-reply)'
+          : 'handler-present(${reply.runtimeType})';
+    } catch (e) {
+      return 'handler-present(${e.toString().split('\n').first})';
+    }
   }
 
   Future<void> _initializeOnce() async {
