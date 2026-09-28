@@ -38,23 +38,6 @@ class AuthService {
     }
   }
 
-  Future<UserCredential> signUp(
-    String name,
-    String email,
-    String password,
-  ) async {
-    final normalizedEmail = email.trim().toLowerCase();
-
-    final cred = await _auth.createUserWithEmailAndPassword(
-      email: normalizedEmail,
-      password: password,
-    );
-
-    await cred.user?.updateDisplayName(name.trim());
-
-    return cred;
-  }
-
   Future<void> sendPasswordReset(String email) {
     return _auth.sendPasswordResetEmail(
       email: email.trim().toLowerCase(),

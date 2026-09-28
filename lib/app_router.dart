@@ -9,6 +9,7 @@ import 'screens/course_detail_screen.dart';
 import 'screens/lesson_player_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/change_password_screen.dart';
+import 'screens/account_security_screen.dart';
 import 'screens/meeting_screen.dart';
 import 'screens/notifications_tab.dart';
 import 'screens/admin_control_center_screen.dart';
@@ -75,6 +76,7 @@ GoRouter buildRouter() {
       GoRoute(path: '/admin-control', builder: (context, state) => const AdminControlCenterScreen()),
       GoRoute(path: '/meeting/:requestId', builder: (context, state) => MeetingScreen(requestId: state.pathParameters['requestId']!)),
       GoRoute(path: '/change-password', builder: (context, state) => const ChangePasswordScreen()),
+      GoRoute(path: '/account-security', builder: (context, state) => const AccountSecurityScreen()),
       GoRoute(
         path: '/course/:courseId/lesson/:lessonId',
         builder: (context, state) => LessonPlayerScreen(

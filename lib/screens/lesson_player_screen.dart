@@ -30,6 +30,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   bool _fullscreen = false;
   String? _error;
   double _speed = 1.0;
+  double _volume = 1.0;
   final _learning = LearningService();
   static const int _previewLimitSeconds = 120;
   bool _previewEnded = false;
@@ -300,6 +301,27 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                                 tooltip: 'تقديم 10 ثوانٍ',
                                 onPressed: () => _seek(10),
                                 icon: const Icon(Icons.forward_10, color: Colors.white),
+                              ),
+                              IconButton(
+                                tooltip: 'الصوت',
+                                onPressed: () => showModalBottomSheet<void>(
+                                  context: context,
+                                  backgroundColor: AppColors.ink,
+                                  builder: (_) => Padding(
+                                    padding: const EdgeInsets.all(18),
+                                    child: StatefulBuilder(builder: (ctx, setLocal) => Column(mainAxisSize: MainAxisSize.min, children: [
+                                      const Text('الصوت', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                                      Slider(
+                                        value: _volume,
+                                        min: 0,
+                                        max: 1,
+                                        divisions: 10,
+                                        onChanged: (v) async { setLocal(() => _volume = v); await c.setVolume(v); setState(() {}); },
+                                      ),
+                                    ])),
+                                  ),
+                                ),
+                                icon: Icon(_volume == 0 ? Icons.volume_off : Icons.volume_up, color: Colors.white),
                               ),
                               IconButton(
                                 tooltip: 'السرعة',

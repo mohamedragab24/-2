@@ -8,6 +8,13 @@ import '../theme/app_theme.dart';
 import 'edit_profile_screen.dart';
 import 'instructor_dashboard_screen.dart';
 
+class _InfoPage extends StatelessWidget {
+  final String title;
+  final String body;
+  const _InfoPage({required this.title, required this.body});
+  @override Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: Text(title)), body: RefreshIndicator(onRefresh: () async {}, child: ListView(padding: const EdgeInsets.all(20), children: [Text(body, style: const TextStyle(height: 1.8, fontSize: 14))])));
+}
+
 class AccountTab extends StatelessWidget {
   const AccountTab({super.key});
 
@@ -62,37 +69,7 @@ class AccountTab extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
-                child: Text('نوع استخدام الحساب', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: false, icon: Icon(Icons.school_outlined), label: Text('مستفهم')),
-                    ButtonSegment(value: true, icon: Icon(Icons.co_present_outlined), label: Text('مُفهّم')),
-                  ],
-                  selected: {isMofahhem},
-                  onSelectionChanged: (values) async {
-                    final next = values.first;
-                    try {
-                      await FirestoreService().updateUserProfile(
-                        uid: user.uid,
-                        mode: next ? 'mofahhem' : 'mostafhem',
-                      );
-                    } catch (e) {
-                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر تغيير نوع الحساب: $e')));
-                    }
-                  },
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
-                child: Text(
-                  isMofahhem
-                      ? 'وضع المُفهّم: يمكنك إنشاء كورسات وإرسالها للمراجعة.'
-                      : 'وضع المستفهم: يمكنك تصفح الكورسات والتعلّم منها.',
-                  style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
-                ),
+                child: Text('الحساب والأمان', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               ),
               if (isMofahhem)
                 ListTile(
@@ -109,13 +86,18 @@ class AccountTab extends StatelessWidget {
                   trailing: const Icon(Icons.chevron_left),
                   onTap: () => context.push('/admin-control'),
                 ),
-              const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.menu_book_outlined),
-                title: const Text('كورساتي المشتراة'),
+                leading: const Icon(Icons.verified_user_outlined),
+                title: const Text('أمان الحساب والأجهزة'),
+                subtitle: Text(user.emailVerified ? 'البريد الإلكتروني موثّق' : 'البريد الإلكتروني غير موثّق'),
                 trailing: const Icon(Icons.chevron_left),
-                onTap: () {},
+                onTap: () => context.push('/account-security'),
               ),
+              const Divider(height: 1),
+              ListTile(leading: const Icon(Icons.menu_book_outlined), title: const Text('كورساتي والمفضلة'), trailing: const Icon(Icons.chevron_left), onTap: () => DefaultTabController.of(context)?.animateTo(0)),
+              ListTile(leading: const Icon(Icons.info_outline), title: const Text('من نحن'), trailing: const Icon(Icons.chevron_left), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const _InfoPage(title: 'من نحن', body: 'Fahimt منصة تعليمية لعرض الكورسات والمحاضرات ومتابعة التعلم من خلال التطبيق والمنصة.')))),
+              ListTile(leading: const Icon(Icons.privacy_tip_outlined), title: const Text('سياسة الخصوصية'), trailing: const Icon(Icons.chevron_left), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const _InfoPage(title: 'سياسة الخصوصية', body: 'نستخدم بيانات الحساب والشراء والتقدم فقط لتقديم الخدمة وحماية المحتوى وتحسين تجربة المستخدم، وفق سياسة الخصوصية المعتمدة على المنصة.')))),
+              ListTile(leading: const Icon(Icons.assignment_return_outlined), title: const Text('سياسة الاسترجاع'), trailing: const Icon(Icons.chevron_left), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const _InfoPage(title: 'سياسة الاسترجاع', body: 'تخضع طلبات الاسترجاع لشروط سياسة الاسترجاع المنشورة على المنصة، ويتم التعامل معها من خلال الدعم وإدارة المدفوعات.')))),
               ListTile(
                 leading: const Icon(Icons.lock_outline),
                 title: const Text('تغيير كلمة المرور'),
