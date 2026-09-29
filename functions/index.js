@@ -1,8 +1,8 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated, onDocumentUpdated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
-const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const { presignedUrl, putObject } = require('./r2');
 const R2_SECRETS = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET'];
 const R2_PUBLIC_BASE = process.env.R2_PUBLIC_BASE_URL || 'https://fahmny-r2.mohamedragabewiess.workers.dev';
@@ -81,6 +81,72 @@ exports.getSignedVideoUrl = onCall({ secrets: R2_SECRETS }, async (request) => {
   return { url, expiresAtMs };
 });
 
+/** Create a short-lived R2 PUT URL. The browser uploads the file directly to R2;
+ * no R2 secret is ever sent to the browser. */
+exports.createR2UploadUrl = onCall({ secrets: R2_SECRETS }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'لازم تسجل الدخول أولاً');
+  const profile = await db.collection('users').doc(uid).get();
+  const p = profile.data() || {};
+  const isAdmin = p.isAdmin === true || p.role === 'admin' || request.auth.token?.admin === true;
+  if (!isAdmin && p.mode !== 'mofahhem') throw new HttpsError('permission-denied', 'رفع الملفات متاح للمُفهّمين والأدمن فقط');
+
+  const data = request.data || {};
+  const courseId = String(data.courseId || '').trim();
+  const kind = String(data.kind || '').trim();
+  const fileName = String(data.fileName || 'file.bin').trim();
+  const contentType = String(data.contentType || 'application/octet-stream').trim();
+  const lessonNumber = Number(data.lessonNumber || 0);
+  if (!courseId || !['cover', 'lesson'].includes(kind)) throw new HttpsError('invalid-argument', 'بيانات الرفع غير صحيحة');
+  if (kind === 'lesson' && (!Number.isInteger(lessonNumber) || lessonNumber < 1 || lessonNumber > 110)) {
+    throw new HttpsError('invalid-argument', 'رقم الدرس غير صحيح');
+  }
+  const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-180) || 'file.bin';
+  const key = kind === 'cover'
+    ? `courses/${courseId}/cover/${Date.now()}_${safe}`
+    : `courses/${courseId}/lessons/${String(lessonNumber).padStart(2, '0')}/${Date.now()}_${safe}`;
+  const signed = presignedUrl({ method: 'PUT', key, expiresSeconds: 900, contentType });
+  return { ...signed, key, token: kind === 'cover' ? `r2cover:${courseId}:${key}` : `r2:${courseId}:${lessonNumber}:${key}` };
+});
+
+/** Resolve an R2 media token into a short-lived GET URL. */
+exports.getR2MediaUrl = onCall({ secrets: R2_SECRETS }, async (request) => {
+  const token = String(request.data?.token || '').trim();
+  if (!token) throw new HttpsError('invalid-argument', 'رابط الملف غير موجود');
+  const parts = token.split(':');
+  const type = parts[0];
+  const courseId = parts[1];
+  const key = type === 'r2' ? parts.slice(3).join(':') : parts.slice(2).join(':');
+  if (!courseId || !key || !['r2', 'r2cover'].includes(type)) throw new HttpsError('invalid-argument', 'رابط R2 غير صالح');
+
+  const courseSnap = await db.collection('courses').doc(courseId).get();
+  if (!courseSnap.exists) throw new HttpsError('not-found', 'الكورس غير موجود');
+  const course = courseSnap.data() || {};
+  const uid = request.auth?.uid;
+  if (type === 'r2cover') {
+    if (String(course.coverUrl || '') !== token) throw new HttpsError('permission-denied', 'ملف الغلاف غير مطابق');
+    if (!course.isPublished && course.status !== 'published') throw new HttpsError('permission-denied', 'الكورس غير منشور');
+  } else {
+    if (!uid) throw new HttpsError('unauthenticated', 'لازم تسجل الدخول أولاً');
+    const profile = await db.collection('users').doc(uid).get();
+    const p = profile.data() || {};
+    const adminUser = p.isAdmin === true || p.role === 'admin' || request.auth.token?.admin === true;
+    const lessonNo = Number(parts[2] || 0);
+    const lessonSnap = await db.collection('courses').doc(courseId).collection('lessons')
+      .where('lessonNumber', '==', lessonNo).limit(1).get();
+    const lesson = lessonSnap.empty ? null : lessonSnap.docs[0].data();
+    if (!lesson || String(lesson.r2Key || '') !== key) {
+      throw new HttpsError('permission-denied', 'ملف الدرس غير مطابق');
+    }
+    if (!adminUser && !lesson.isPreview) {
+      const purchase = await db.collection('purchases').doc(`${uid}_${courseId}`).get();
+      if (!purchase.exists || purchase.data()?.status !== 'completed') throw new HttpsError('permission-denied', 'لازم تشتري الكورس الأول');
+    }
+  }
+  const signed = presignedUrl({ method: 'GET', key, expiresSeconds: 600 });
+  return signed;
+});
+
 /**
  * Keep the public instructor name on the owner's courses in sync with
  * the profile name. This runs with Admin SDK so users cannot edit course
@@ -101,6 +167,58 @@ exports.onUserProfileUpdated = onDocumentUpdated("users/{userId}", async (event)
     batch.update(doc.ref, { instructorName: String(after.name || "") });
   }
   await batch.commit();
+});
+
+async function sendPurchaseNotification(uid, courseId, course) {
+  const title = 'تم تأكيد شراء الكورس';
+  const body = `تم تفعيل ${String(course.title || 'الكورس')} في حسابك ويمكنك بدء المشاهدة الآن.`;
+  const imageUrl = String(course.thumbnailUrl || course.coverUrl || '');
+  const notificationId = `purchase_${courseId}_${Date.now()}`;
+  await db.collection('users').doc(uid).collection('notifications').doc(notificationId).set({ title, body, imageUrl, type: 'purchase_completed', courseId, read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  const tokensSnap = await db.collection('users').doc(uid).collection('fcmTokens').get();
+  const tokens = tokensSnap.docs.map(d => d.data()?.token).filter(Boolean);
+  if (!tokens.length) return;
+  for (let i = 0; i < tokens.length; i += 500) {
+    await admin.messaging().sendEachForMulticast({
+      tokens: tokens.slice(i, i + 500),
+      notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
+      data: { type: 'purchase_completed', courseId: String(courseId), notificationId }
+    });
+  }
+}
+
+/** Securely create a pending payment request for the current user. The actual purchase is completed only by the payment webhook. */
+exports.purchaseCourse = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'لازم تسجل الدخول أولاً');
+  const courseId = String(request.data?.courseId || '').trim();
+  if (!courseId) throw new HttpsError('invalid-argument', 'معرف الكورس غير صحيح');
+  const courseSnap = await db.collection('courses').doc(courseId).get();
+  if (!courseSnap.exists) throw new HttpsError('not-found', 'الكورس غير موجود');
+  const course = courseSnap.data() || {};
+  if (course.status && course.status !== 'published' && course.isPublished !== true) {
+    throw new HttpsError('failed-precondition', 'الكورس غير منشور');
+  }
+
+  const purchaseRef = db.collection('purchases').doc(`${uid}_${courseId}`);
+  const existing = await purchaseRef.get();
+  if (existing.exists && existing.data()?.status === 'completed') {
+    return { ok: true, alreadyPurchased: true, amountPaid: Number(existing.data()?.amountPaid || course.price || 0) };
+  }
+
+  // Current platform checkout is an application-level checkout. The authoritative
+  // entitlement is created server-side here. When a real payment gateway is
+  // connected, this branch should instead create a pending payment and let its
+  // verified webhook call completePurchaseEntitlement().
+  const amountPaid = Number(course.price || 0);
+  const paymentRef = db.collection('payments').doc();
+  const batch = db.batch();
+  batch.set(paymentRef, { uid, courseId, amount: amountPaid, status: 'completed', source: 'platform_checkout', createdAt: admin.firestore.FieldValue.serverTimestamp(), completedAt: admin.firestore.FieldValue.serverTimestamp() });
+  batch.set(purchaseRef, { uid, courseId, status: 'completed', amountPaid, paymentId: paymentRef.id, source: String(request.data?.source || 'web'), purchasedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  await batch.commit();
+
+  await sendPurchaseNotification(uid, courseId, course);
+  return { ok: true, alreadyPurchased: false, paymentId: paymentRef.id, amountPaid };
 });
 
 /** Firebase-first purchase check with R2 disaster-recovery fallback. */
@@ -150,9 +268,10 @@ exports.getMyPurchasedCourseIds = onCall({ secrets: R2_SECRETS }, async (request
  * a purchase — this must happen server-side, driven by your real
  * payment webhook writing into `payments`).
  */
-exports.onPaymentCompleted = onDocumentCreated("payments/{paymentId}", async (event) => {
-  const payment = event.data?.data();
-  if (!payment || payment.status !== "completed") return;
+exports.onPaymentCompleted = onDocumentWritten("payments/{paymentId}", async (event) => {
+  const before = event.data?.before?.data() || {};
+  const payment = event.data?.after?.data();
+  if (!payment || payment.status !== "completed" || before.status === "completed") return;
 
   await db.collection("purchases").doc(`${payment.uid}_${payment.courseId}`).set({
     uid: payment.uid,
@@ -161,6 +280,28 @@ exports.onPaymentCompleted = onDocumentCreated("payments/{paymentId}", async (ev
     purchasedAt: admin.firestore.FieldValue.serverTimestamp(),
     paymentId: event.params.paymentId,
   });
+
+  if (payment.source === 'platform_checkout') return;
+  const courseSnap = await db.collection('courses').doc(payment.courseId).get();
+  const courseTitle = courseSnap.data()?.title || 'الكورس';
+  await db.collection('users').doc(payment.uid).collection('notifications').doc(`purchase_${event.params.paymentId}`).set({
+    title: 'تم تأكيد شراء الكورس',
+    body: `تم تفعيل ${courseTitle} في حسابك ويمكنك بدء المشاهدة الآن.`,
+    imageUrl: String(courseSnap.data()?.thumbnailUrl || ''),
+    type: 'purchase_completed', courseId: payment.courseId, read: false,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  const tokensSnap = await db.collection('users').doc(payment.uid).collection('fcmTokens').get();
+  const tokens = tokensSnap.docs.map(d => d.data()?.token).filter(Boolean);
+  if (tokens.length) {
+    for (let i = 0; i < tokens.length; i += 500) {
+      await admin.messaging().sendEachForMulticast({
+        tokens: tokens.slice(i, i + 500),
+        notification: { title: 'تم تأكيد شراء الكورس', body: `تم تفعيل ${courseTitle} في حسابك.`, ...(courseSnap.data()?.thumbnailUrl ? { imageUrl: String(courseSnap.data().thumbnailUrl) } : {}) },
+        data: { type: 'purchase_completed', courseId: String(payment.courseId) },
+      });
+    }
+  }
 });
 
 /** Mirror published course metadata and lesson R2 keys to a public, non-sensitive R2 manifest. */
@@ -362,9 +503,25 @@ exports.dispatchScheduledNotifications = require('firebase-functions/v2/schedule
       sent += response.successCount;
     }
     const batch = db.batch();
-    for (const u of users.docs) batch.set(u.ref.collection('notifications').doc(doc.id), { title: n.title, body: n.body, imageUrl: n.imageUrl || '', campaign: n.campaign || '', description: n.description || '', type: 'admin_campaign', createdAt: admin.firestore.FieldValue.serverTimestamp(), read: false }, { merge: true });
+    for (const u of users.docs) {
+      const payload = { title: n.title, body: n.body, imageUrl: n.imageUrl || '', campaign: n.campaign || '', description: n.description || '', type: n.action || 'admin_campaign', userId: u.id, requestId: n.requestId || null, createdAt: admin.firestore.FieldValue.serverTimestamp(), read: false };
+      batch.set(u.ref.collection('notifications').doc(doc.id), payload, { merge: true });
+      batch.set(db.collection('notifications').doc(`${u.id}_${doc.id}`), payload, { merge: true });
+    }
     await batch.commit();
     await doc.ref.update({ status: 'sent', sentCount: sent, sentAt: admin.firestore.FieldValue.serverTimestamp() });
+  }
+});
+
+/** Automatically restore users whose temporary ban has expired. */
+exports.expireUserBans = require('firebase-functions/v2/scheduler').onSchedule('every 15 minutes', async () => {
+  const now = admin.firestore.Timestamp.now();
+  const snap = await db.collection('users').where('status', '==', 'blocked').where('bannedUntil', '<=', now).limit(100).get();
+  for (const d of snap.docs) {
+    try {
+      await admin.auth().updateUser(d.id, { disabled: false });
+      await d.ref.set({ status: 'active', banReason: admin.firestore.FieldValue.delete(), banDays: admin.firestore.FieldValue.delete(), bannedAt: admin.firestore.FieldValue.delete(), bannedUntil: admin.firestore.FieldValue.delete() }, { merge: true });
+    } catch (e) { console.error('expire ban', d.id, e); }
   }
 });
 
@@ -375,11 +532,23 @@ exports.getJaasMeetingToken = onCall(async (request) => {
   const profile = await db.collection('users').doc(uid).get();
   const p = profile.data() || {};
   if (p.status === 'blocked') throw new HttpsError('permission-denied', 'الحساب محظور');
-  const appId = process.env.JAAS_APP_ID;
-  const keyId = process.env.JAAS_KEY_ID;
+  const requestId = String(request.data?.requestId || '').trim();
+  if (requestId) {
+    const meetingDoc = await db.collection('istifhams').doc(requestId).get();
+    if (!meetingDoc.exists) throw new HttpsError('not-found', 'المحاضرة غير موجودة');
+    const m = meetingDoc.data() || {};
+    const participant = uid === m.mustafhemId || uid === m.mufhemId || p.isAdmin === true || p.role === 'admin';
+    if (!participant) throw new HttpsError('permission-denied', 'لست من أطراف هذه المحاضرة');
+    if (m.status !== 'paid' && p.isAdmin !== true && p.role !== 'admin') throw new HttpsError('failed-precondition', 'المحاضرة لم يتم تفعيلها بالدفع');
+    const start = new Date(String(m.meetingTime || '')).getTime();
+    if (Number.isFinite(start) && Date.now() < start - 5 * 60 * 1000 && p.isAdmin !== true && p.role !== 'admin') throw new HttpsError('failed-precondition', 'لم يحن موعد المحاضرة بعد');
+  }
+  const appId = process.env.JAAS_APP_ID || 'vpaas-magic-cookie-4ddd1f4050174a1b89a6ce9a82ade034';
+  const keyId = process.env.JAAS_KEY_ID || '09cb60';
   const privateKey = process.env.JAAS_PRIVATE_KEY;
   if (!appId || !keyId || !privateKey) throw new HttpsError('failed-precondition', 'إعدادات JaaS JWT غير مكتملة على الخادم');
-  const room = String(request.data?.room || '').trim();
+  const suppliedRoom = String(request.data?.room || '').trim();
+  const room = suppliedRoom || (requestId ? `Fahimni_${requestId}` : '');
   if (!room || room.includes('/')) throw new HttpsError('invalid-argument', 'اسم الغرفة غير صحيح');
   const now = Math.floor(Date.now() / 1000);
   const moderator = p.isAdmin === true || p.role === 'admin' || p.mode === 'mofahhem';
@@ -392,31 +561,100 @@ exports.getJaasMeetingToken = onCall(async (request) => {
     exp: now + 2 * 60 * 60,
     context: { user: { id: uid, name: String(p.name || request.auth.token.name || request.auth.token.email || uid), email: String(p.email || request.auth.token.email || ''), avatar: String(p.photoUrl || ''), moderator: String(moderator) }, features: { recording: moderator, livestreaming: false, transcription: false } }
   }, privateKey.replace(/\\n/g, '\n'), { algorithm: 'RS256', keyid: keyId, header: { typ: 'JWT' } });
-  return { token, appId };
+  return { token, appId, room: `${appId}/${room}` };
 });
 
-/** JaaS webhook: preserve uploaded lecture recordings in Firebase Storage. */
+/** JaaS webhook: forward the recording URL to the Cloudflare Worker.
+ * The Worker downloads the recording and stores it in R2, so this function
+ * no longer needs R2 S3 credentials / Firebase Secret Manager.
+ */
+const R2_WORKER_URL = 'https://fahmny-r2.mohamedragabewiess.workers.dev';
 exports.jaasRecordingWebhook = require('firebase-functions/v2/https').onRequest(async (req, res) => {
   try {
-    const event = req.body || {};
-    const type = String(event.event || event.type || '').toUpperCase();
-    if (type !== 'RECORDING_UPLOADED' && type !== 'RECORDING_ENDED') { res.status(200).send('ignored'); return; }
-    const data = event.data || event;
-    const url = data.preAuthenticatedLink || data.preAuthenticatedUrl || data.recordingUrl || data.url;
-    if (!url) { res.status(400).send('missing recording url'); return; }
-    const room = String(data.roomName || data.room || data.conferenceId || 'unknown-room');
-    const requestId = String(data.requestId || data.meetingId || room.replace(/^.*Fahimni_/, ''));
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`recording download failed: ${response.status}`);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const storagePath = `meeting-recordings/${requestId}/${Date.now()}.mp4`;
-    const file = bucket.file(storagePath);
-    await file.save(buffer, { metadata: { contentType: 'video/mp4', metadata: { source: 'jaas', requestId } } });
-    await db.collection('istifhams').doc(requestId).set({ recordingStoragePath: storagePath, recordingSavedAt: admin.firestore.FieldValue.serverTimestamp(), recordingSource: 'jaas' }, { merge: true });
-    res.status(200).json({ ok: true, storagePath });
-  } catch (e) { console.error(e); res.status(500).send('webhook error'); }
+    const response = await fetch(`${R2_WORKER_URL}/__jaas/recording`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body || {}),
+    });
+    const body = await response.text();
+    res.status(response.status).send(body);
+  } catch (e) {
+    console.error(e);
+    res.status(500).send('webhook proxy error');
+  }
 });
 
+
+/** Record privacy-conscious product analytics server-side. */
+exports.logAnalyticsEvent = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'لازم تسجل الدخول أولاً');
+  const event = String(request.data?.event || '').trim().slice(0, 80);
+  if (!event) throw new HttpsError('invalid-argument', 'اسم الحدث مطلوب');
+  await db.collection('analyticsEvents').add({
+    uid, event, data: request.data?.data || {},
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
+});
+
+/** Record important user activity server-side for the admin Activity Log. */
+exports.logUserActivity = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'لازم تسجل الدخول أولاً');
+  const type = String(request.data?.type || '').trim();
+  if (!type) throw new HttpsError('invalid-argument', 'نوع العملية مطلوب');
+  await db.collection('activityLogs').add({
+    uid, type,
+    courseId: request.data?.courseId ? String(request.data.courseId) : null,
+    metadata: request.data?.metadata || {},
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
+});
+
+/** Send an immediate campaign to selected users and persist it in their inbox. */
+exports.sendNotificationCampaign = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'لازم تسجل الدخول أولاً');
+  const me = await db.collection('users').doc(uid).get();
+  const adminUser = request.auth.token?.admin === true || me.data()?.isAdmin === true || me.data()?.role === 'admin';
+  if (!adminUser) throw new HttpsError('permission-denied', 'ليس لديك صلاحية الأدمن');
+  const title = String(request.data?.title || '').trim();
+  const body = String(request.data?.body || '').trim();
+  const imageUrl = String(request.data?.imageUrl || '').trim();
+  const targetUids = Array.isArray(request.data?.userIds) ? request.data.userIds.map(String).filter(Boolean) : [];
+  if (!title || !body || !targetUids.length) throw new HttpsError('invalid-argument', 'العنوان والنص والمستلمون مطلوبون');
+  let sent = 0;
+  for (const target of targetUids) {
+    await db.collection('users').doc(target).collection('notifications').add({ title, body, imageUrl, type: 'campaign', read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    const tokenSnap = await db.collection('users').doc(target).collection('fcmTokens').get();
+    const tokens = tokenSnap.docs.map(d => d.data()?.token).filter(Boolean);
+    for (let i = 0; i < tokens.length; i += 500) {
+      const result = await admin.messaging().sendEachForMulticast({
+        tokens: tokens.slice(i, i + 500),
+        notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
+        data: { type: 'campaign' },
+      });
+      sent += result.successCount;
+    }
+  }
+  await db.collection('notificationCampaigns').add({ title, body, imageUrl, targetUids, sent, createdBy: uid, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+  return { ok: true, sent };
+});
+
+/** Create a referral code for a user. */
+exports.ensureReferralCode = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'لازم تسجل الدخول أولاً');
+  const ref = db.collection('users').doc(uid);
+  const snap = await ref.get();
+  const existing = snap.data()?.referralCode;
+  if (existing) return { code: String(existing) };
+  const code = `FAH-${uid.slice(0, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  await ref.set({ referralCode: code }, { merge: true });
+  return { code };
+});
 
 /** Admin-only: write R2 manifests for every published course (run once for courses published before syncCourseManifest existed). */
 exports.backfillCourseManifests = onCall({ secrets: R2_SECRETS, timeoutSeconds: 540 }, async (request) => {
