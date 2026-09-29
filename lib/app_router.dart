@@ -45,8 +45,9 @@ GoRouter buildRouter() {
         return null;
       }
 
-      if (loggedIn && currentUser?.emailVerified == false && state.matchedLocation != '/verify-email') {
-        return '/verify-email';
+      // Email verification is disabled: never force users to the verify screen.
+      if (state.matchedLocation == '/verify-email') {
+        return loggedIn ? '/home' : '/login';
       }
 
       if (loggedIn && ['/login', '/forgot-password', '/'].contains(state.matchedLocation)) {

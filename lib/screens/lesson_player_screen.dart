@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 import '../services/firestore_service.dart';
 import '../services/video_service.dart';
+import '../services/r2_worker_service.dart';
 import '../models/lesson.dart';
 import '../theme/app_theme.dart';
 import '../services/learning_service.dart';
@@ -40,6 +41,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   @override
   void initState() {
     super.initState();
+    try { const MethodChannel('masar_app/audio_protection').invokeMethod('blockAudioCapture'); } catch (_) {}
     _load();
   }
 
@@ -58,16 +60,29 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     }
 
     try {
-      final signed = await _videoService.getSignedVideoUrl(
-        courseId: widget.courseId,
-        lessonId: widget.lessonId,
-      );
+      String videoUrl;
+      DateTime? expiresAt;
+      try {
+        final signed = await _videoService.getSignedVideoUrl(
+          courseId: widget.courseId,
+          lessonId: widget.lessonId,
+        );
+        videoUrl = signed.url;
+        expiresAt = signed.expiresAt;
+      } catch (e) {
+        // The Cloud Function is unreachable: read the video straight from Cloudflare R2,
+        // only when the account owns the course (or the lesson is a free preview).
+        if (e.toString().contains('permission-denied')) rethrow;
+        final fallback = await _r2FallbackUrl();
+        if (fallback == null) rethrow;
+        videoUrl = fallback;
+      }
       final savedSeconds = await _firestore.getLessonProgressSeconds(
         _uid,
         widget.courseId,
         widget.lessonId,
       );
-      final controller = VideoPlayerController.networkUrl(Uri.parse(signed.url));
+      final controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
       await controller.initialize();
 
       if (savedSeconds > 0 && savedSeconds < controller.value.duration.inSeconds) {
@@ -90,11 +105,13 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
         _loading = false;
       });
 
-      final refreshIn = signed.expiresAt.difference(DateTime.now()) - const Duration(seconds: 30);
-      _urlRefreshTimer = Timer(
-        refreshIn.isNegative ? const Duration(seconds: 5) : refreshIn,
-        _load,
-      );
+      if (expiresAt != null) {
+        final refreshIn = expiresAt.difference(DateTime.now()) - const Duration(seconds: 30);
+        _urlRefreshTimer = Timer(
+          refreshIn.isNegative ? const Duration(seconds: 5) : refreshIn,
+          _load,
+        );
+      }
       _progressTimer = Timer.periodic(const Duration(seconds: 10), (_) => _saveProgress());
     } catch (e) {
       if (mounted) {
@@ -106,6 +123,17 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
         });
       }
     }
+  }
+
+  Future<String?> _r2FallbackUrl() async {
+    final lessons = await _firestore.getLessons(widget.courseId);
+    Lesson? lesson;
+    for (final l in lessons) {
+      if (l.id == widget.lessonId) lesson = l;
+    }
+    if (lesson == null || lesson.r2Key.isEmpty) return null;
+    final allowed = lesson.isPreview || await _firestore.hasPurchased(_uid, widget.courseId);
+    return allowed ? R2WorkerService.keyToUrl(lesson.r2Key) : null;
   }
 
   Future<bool> _isPreviewLesson() async {

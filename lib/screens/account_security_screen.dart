@@ -17,7 +17,7 @@ class AccountSecurityScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Card(child: ListTile(leading: Icon(user.emailVerified ? Icons.verified : Icons.warning_amber_outlined, color: user.emailVerified ? AppColors.emerald : AppColors.coral), title: const Text('البريد الإلكتروني'), subtitle: Text(user.email ?? ''), trailing: Text(user.emailVerified ? 'موثّق' : 'غير موثّق'))),
+          Card(child: ListTile(leading: const Icon(Icons.email_outlined), title: const Text('البريد الإلكتروني'), subtitle: Text(user.email ?? ''))),
           const SizedBox(height: 12),
           const Text('الأجهزة المسجلة', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
           const SizedBox(height: 8),

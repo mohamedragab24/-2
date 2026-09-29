@@ -22,15 +22,24 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   bool _openedInitialLesson = false;
   bool _openedPurchasedLesson = false;
   bool _following = false;
+  final FirestoreService _fs = FirestoreService();
+  late Future<Course?> _courseFuture;
+  Future<bool>? _purchasedFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _courseFuture = _fs.getCourse(widget.courseId);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final firestore = FirestoreService();
+    final firestore = _fs;
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
       body: FutureBuilder<Course?>(
-        future: firestore.getCourse(widget.courseId),
+        future: _courseFuture,
         builder: (context, courseSnap) {
           if (courseSnap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
           final course = courseSnap.data;
@@ -46,7 +55,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                     const SizedBox(height: 6),
                     const Text('تحقق من الاتصال ثم أعد المحاولة. بياناتك ومشترياتك محفوظة.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: 12.5)),
                     const SizedBox(height: 14),
-                    FilledButton(onPressed: () => setState(() {}), child: const Text('إعادة المحاولة')),
+                    FilledButton(onPressed: () => setState(() { _courseFuture = firestore.getCourse(widget.courseId); _purchasedFuture = null; }), child: const Text('إعادة المحاولة')),
                     TextButton(onPressed: () => context.go('/'), child: const Text('الرئيسية')),
                   ]),
                 ),
@@ -55,7 +64,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           }
 
           return FutureBuilder<bool>(
-            future: uid == null ? Future.value(false) : firestore.hasPurchased(uid, widget.courseId),
+            future: _purchasedFuture ??= (uid == null ? Future.value(false) : firestore.hasPurchased(uid, widget.courseId)),
             builder: (context, purchasedSnap) {
               final purchased = purchasedSnap.data ?? false;
               if (purchased && !_openedPurchasedLesson && widget.initialLessonNumber <= 1) {

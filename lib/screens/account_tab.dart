@@ -89,7 +89,7 @@ class AccountTab extends StatelessWidget {
               ListTile(
                 leading: const Icon(Icons.verified_user_outlined),
                 title: const Text('أمان الحساب والأجهزة'),
-                subtitle: Text(user.emailVerified ? 'البريد الإلكتروني موثّق' : 'البريد الإلكتروني غير موثّق'),
+                subtitle: Text(user.email ?? 'إدارة الأمان والأجهزة'),
                 trailing: const Icon(Icons.chevron_left),
                 onTap: () => context.push('/account-security'),
               ),

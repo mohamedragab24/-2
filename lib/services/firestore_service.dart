@@ -90,30 +90,11 @@ class FirestoreService {
   }
 
   Future<List<Course>> getCoursesByIds(List<String> ids) async {
-    if (ids.isEmpty) {
-      return [];
-    }
-
-    final courses = <Course>[];
-
-    for (final id in ids) {
-      if (id.trim().isEmpty) {
-        continue;
-      }
-
-      final doc = await _db.collection('courses').doc(id).get();
-
-      if (doc.exists && doc.data() != null) {
-        courses.add(
-          Course.fromMap(
-            doc.id,
-            doc.data()!,
-          ),
-        );
-      }
-    }
-
-    return courses;
+    final clean = ids.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList();
+    if (clean.isEmpty) return [];
+    // Firebase -> R2 manifest -> local copy, per course, in parallel.
+    final results = await Future.wait(clean.map((id) => getCourse(id)));
+    return results.whereType<Course>().toList();
   }
 
   Future<List<Lesson>> getLessons(String courseId) async {
@@ -278,27 +259,50 @@ class FirestoreService {
     try { (await SharedPreferences.getInstance()).setBool('purchase_${uid}_$courseId', v); } catch (_) {}
   }
 
-  Stream<List<String>> watchMyCourseIds(String uid) {
-    return _db.collection('purchases').where('uid', isEqualTo: uid).where('status', isEqualTo: 'completed').snapshots().asyncMap((snapshot) async {
-      final ids = snapshot.docs.map((doc) => (doc.data()['courseId'] ?? '').toString()).where((id) => id.isNotEmpty).toSet();
-      try {
-        final legacy = await _db.collection('users').doc(uid).collection('purchases').get();
-        for (final doc in legacy.docs) {
-          final data = doc.data();
-          if (data['status'] != 'cancelled' && data['status'] != 'refunded') ids.add((data['courseId'] ?? doc.id).toString());
+  Future<List<String>> _cachedMyIds(String uid) async {
+    try { return (await SharedPreferences.getInstance()).getStringList('my_courses_$uid') ?? <String>[]; } catch (_) { return <String>[]; }
+  }
+
+  Future<void> _cacheMyIds(String uid, List<String> ids) async {
+    try { (await SharedPreferences.getInstance()).setStringList('my_courses_$uid', ids); } catch (_) {}
+  }
+
+  Future<List<String>> _myIdsFromFunction(String uid) async {
+    try {
+      final result = await FirebaseFunctions.instanceFor(region: 'us-central1').httpsCallable('getMyPurchasedCourseIds').call<Map<String, dynamic>>();
+      return (result.data['courseIds'] as List? ?? const []).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+    } catch (_) {
+      return <String>[];
+    }
+  }
+
+  /// Purchased course ids: Firebase (live) -> Cloud Function (Firebase, then R2 entitlements)
+  /// -> last known list on the device. Purchases made on the website appear automatically.
+  Stream<List<String>> watchMyCourseIds(String uid) async* {
+    final cached = await _cachedMyIds(uid);
+    if (cached.isNotEmpty) yield cached;
+    try {
+      await for (final snapshot in _db.collection('purchases').where('uid', isEqualTo: uid).where('status', isEqualTo: 'completed').snapshots()) {
+        final ids = snapshot.docs.map((doc) => (doc.data()['courseId'] ?? '').toString()).where((id) => id.isNotEmpty).toSet();
+        try {
+          final legacy = await _db.collection('users').doc(uid).collection('purchases').get();
+          for (final doc in legacy.docs) {
+            final data = doc.data();
+            if (data['status'] != 'cancelled' && data['status'] != 'refunded') ids.add((data['courseId'] ?? doc.id).toString());
+          }
+        } catch (_) {}
+        var out = ids.where((id) => id.isNotEmpty).toList();
+        if (out.isEmpty) {
+          out = await _myIdsFromFunction(uid);
+          if (out.isEmpty && cached.isNotEmpty) out = cached;
         }
-      } catch (_) {}
-      if (ids.isNotEmpty) return ids.where((id) => id.isNotEmpty).toList();
-      try {
-        final result = await FirebaseFunctions.instanceFor(region: 'us-central1').httpsCallable('getMyPurchasedCourseIds').call<Map<String,dynamic>>();
-        return (result.data['courseIds'] as List? ?? const []).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
-      } catch (_) { return ids.where((id) => id.isNotEmpty).toList(); }
-    }).handleError((_) async {
-      try {
-        final result = await FirebaseFunctions.instanceFor(region: 'us-central1').httpsCallable('getMyPurchasedCourseIds').call<Map<String,dynamic>>();
-        return (result.data['courseIds'] as List? ?? const []).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
-      } catch (_) { return <String>[]; }
-    });
+        _cacheMyIds(uid, out);
+        yield out;
+      }
+    } catch (_) {
+      final out = await _myIdsFromFunction(uid);
+      yield out.isNotEmpty ? out : cached;
+    }
   }
 
   // ==================== FAVORITES ====================

@@ -10,6 +10,9 @@ class Lesson {
   /// ليس رابط فيديو مباشر.
   final String storagePath;
 
+  /// مفتاح الفيديو في Cloudflare R2 (إن وُجد).
+  final String r2Key;
+
   Lesson({
     required this.id,
     required this.courseId,
@@ -18,6 +21,7 @@ class Lesson {
     required this.durationSeconds,
     required this.isPreview,
     required this.storagePath,
+    this.r2Key = '',
   });
 
   static int _toInt(dynamic value) {
@@ -61,6 +65,7 @@ class Lesson {
 
       // الموقع الجديد يخزن storagePath
       storagePath: (map['storagePath'] ?? '').toString(),
+      r2Key: (map['r2Key'] ?? '').toString(),
     );
   }
 

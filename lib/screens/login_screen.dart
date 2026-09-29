@@ -81,17 +81,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
-      if (user.emailVerified == false) {
-        try {
-          await _auth.sendEmailVerification();
-        } catch (_) {
-          // Verification email is secondary; do not turn a successful Auth
-          // login into a generic failure. The verify screen can retry it.
-        }
-        if (mounted) context.go('/verify-email');
-        return;
-      }
-
       // Firestore profile sync must not make a successful Firebase Auth login
       // look like a failed login. If Firestore rules/network fail, continue to
       // the home screen and let the profile sync recover later.
