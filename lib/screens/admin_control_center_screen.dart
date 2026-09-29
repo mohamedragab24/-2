@@ -163,37 +163,34 @@ class _AdminControlCenterScreenState extends State<AdminControlCenterScreen> {
   }
 
   Future<void> _admin() async {
-    final email = TextEditingController();
-    final password = TextEditingController();
-    final name = TextEditingController();
+    final identifier = TextEditingController();
+    String type = 'auto';
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('إضافة حساب أدمن'),
+      builder: (_) => StatefulBuilder(builder: (ctx, setLocal) => AlertDialog(
+        title: const Text('إضافة صلاحية أدمن'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'الاسم')),
-            TextField(controller: email, decoration: const InputDecoration(labelText: 'البريد')),
-            TextField(
-              controller: password,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'كلمة المرور'),
+            const Text('استخدم حسابًا موجودًا في Firebase. لا يتم إنشاء حساب جديد ولا نطلب اسمًا أو كلمة مرور.'),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: type,
+              decoration: const InputDecoration(labelText: 'نوع المعرف'),
+              items: const [DropdownMenuItem(value: 'auto', child: Text('تحديد تلقائي')), DropdownMenuItem(value: 'uid', child: Text('UID')), DropdownMenuItem(value: 'email', child: Text('البريد الإلكتروني')), DropdownMenuItem(value: 'phone', child: Text('رقم الهاتف'))],
+              onChanged: (v) => setLocal(() => type = v ?? 'auto'),
             ),
+            TextField(controller: identifier, decoration: const InputDecoration(labelText: 'UID أو البريد أو رقم الهاتف')),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('إنشاء')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إضافة')),
         ],
-      ),
+      )),
     );
-    if (ok == true) {
-      await fn.httpsCallable('createAdminAccount').call({
-        'email': email.text.trim(),
-        'password': password.text,
-        'name': name.text.trim(),
-      });
+    if (ok == true && identifier.text.trim().isNotEmpty) {
+      await fn.httpsCallable('grantAdmin').call({'identifier': identifier.text.trim(), 'type': type});
     }
   }
 

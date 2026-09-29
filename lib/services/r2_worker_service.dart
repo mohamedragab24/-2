@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
 class R2WorkerService {
   static const String _defaultWorkerUrl = 'https://fahmny-r2.mohamedragabewiess.workers.dev';
 
@@ -10,6 +13,17 @@ class R2WorkerService {
     final clean = key.replaceFirst(RegExp(r'^/+'), '');
     final encoded = clean.split('/').map(Uri.encodeComponent).join('/');
     return '${workerUrl.replaceFirst(RegExp(r'/+$'), '')}/$encoded';
+  }
+
+  static Future<Map<String, dynamic>?> getJson(String key) async {
+    try {
+      final response = await http.get(Uri.parse(keyToUrl(key)));
+      if (response.statusCode != 200) return null;
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   static String? tokenToUrl(String token) {

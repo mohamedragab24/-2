@@ -79,6 +79,17 @@ service cloud.firestore {
       allow create: if isAdmin();
     }
 
+    // صلاحية الشراء: القراءة للمستخدم صاحب الحساب فقط، والكتابة للخادم/الأدمن فقط.
+    match /purchases/{purchaseId} {
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId}/purchases/{courseId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isAdmin();
+    }
+
     // الإشعارات الفورية
     match /notifications/{id} { 
       allow create: if isSignedIn() || isAdmin();

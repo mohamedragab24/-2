@@ -30,6 +30,12 @@ class DeepLinkService {
   void _handle(Uri uri, GoRouter router) {
     // دعم الروابط المخصصة: fahmny://course2-COURSE_ID
     final host = uri.host;
+    // Stable app-owned links do not depend on a Vercel/website domain.
+    // Examples: fahmny://course/COURSE_ID or fahmny://course2-COURSE_ID
+    if (uri.scheme.toLowerCase() == 'fahmny' && host.toLowerCase() == 'course' && uri.pathSegments.isNotEmpty) {
+      router.go('/course/${uri.pathSegments.first}');
+      return;
+    }
     final customCourseMatch = RegExp(r'^course(\d+)-(.+)$', caseSensitive: false).firstMatch(host);
     if (customCourseMatch != null) {
       final lessonNumber = int.tryParse(customCourseMatch.group(1)!) ?? 1;

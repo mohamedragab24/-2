@@ -9,6 +9,7 @@ class NotificationService {
   FirebaseFirestore get _db => FirebaseFirestore.instance;
   StreamSubscription<String>? _tokenSub;
   StreamSubscription<RemoteMessage>? _messageSub;
+  StreamSubscription<User?>? _authSub;
   final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
@@ -23,6 +24,12 @@ class NotificationService {
     if (messagingSettings.authorizationStatus == AuthorizationStatus.denied) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) await _saveToken(user.uid);
+    await _authSub?.cancel();
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
+      if (user != null) {
+        try { await _saveToken(user.uid); } catch (_) {}
+      }
+    });
     await _messageSub?.cancel();
     _messageSub = FirebaseMessaging.onMessage.listen((message) async {
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -67,5 +74,6 @@ class NotificationService {
   Future<void> dispose() async {
     await _tokenSub?.cancel();
     await _messageSub?.cancel();
+    await _authSub?.cancel();
   }
 }
