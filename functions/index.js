@@ -193,32 +193,49 @@ exports.purchaseCourse = onCall(async (request) => {
   if (!uid) throw new HttpsError('unauthenticated', 'لازم تسجل الدخول أولاً');
   const courseId = String(request.data?.courseId || '').trim();
   if (!courseId) throw new HttpsError('invalid-argument', 'معرف الكورس غير صحيح');
-  const courseSnap = await db.collection('courses').doc(courseId).get();
-  if (!courseSnap.exists) throw new HttpsError('not-found', 'الكورس غير موجود');
-  const course = courseSnap.data() || {};
-  if (course.status && course.status !== 'published' && course.isPublished !== true) {
-    throw new HttpsError('failed-precondition', 'الكورس غير منشور');
+  try {
+    // Course data: Firestore first, then the R2 manifest (same fallback the apps use).
+    let course = null;
+    try {
+      const courseSnap = await db.collection('courses').doc(courseId).get();
+      if (courseSnap.exists) course = courseSnap.data() || {};
+    } catch (e) { console.error('purchaseCourse: course read failed', e); }
+    if (!course) {
+      try {
+        const r = await fetch(`${R2_PUBLIC_BASE}/courses/${encodeURIComponent(courseId)}/manifest.json`);
+        if (r.ok) course = await r.json();
+      } catch (e) { console.error('purchaseCourse: manifest read failed', e); }
+    }
+    if (!course) throw new HttpsError('not-found', 'الكورس غير موجود');
+    if (course.status && course.status !== 'published' && course.isPublished !== true) {
+      throw new HttpsError('failed-precondition', 'الكورس غير منشور');
+    }
+
+    const purchaseRef = db.collection('purchases').doc(`${uid}_${courseId}`);
+    const existing = await purchaseRef.get();
+    if (existing.exists && existing.data()?.status === 'completed') {
+      return { ok: true, alreadyPurchased: true, amountPaid: Number(existing.data()?.amountPaid || course.price || 0) };
+    }
+
+    // Application-level checkout: the entitlement is created server-side here.
+    // With a real payment gateway, create a pending payment and let its verified webhook complete it.
+    const amountPaid = Number(course.price || 0) || 0;
+    const paymentRef = db.collection('payments').doc();
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const batch = db.batch();
+    batch.set(paymentRef, { uid, courseId, amount: amountPaid, status: 'completed', source: 'platform_checkout', createdAt: now, completedAt: now });
+    batch.set(purchaseRef, { uid, courseId, status: 'completed', amountPaid, paymentId: paymentRef.id, source: String(request.data?.source || 'web'), purchasedAt: now, updatedAt: now }, { merge: true });
+    await batch.commit();
+
+    // The purchase is already saved: a notification problem must never fail it.
+    try { await sendPurchaseNotification(uid, courseId, course); }
+    catch (e) { console.error('purchaseCourse: notification failed (purchase kept)', e); }
+    return { ok: true, alreadyPurchased: false, paymentId: paymentRef.id, amountPaid };
+  } catch (e) {
+    if (e instanceof HttpsError) throw e;
+    console.error('purchaseCourse failed', e);
+    throw new HttpsError('internal', `تعذر إتمام الشراء: ${String(e?.message || e).slice(0, 180)}`);
   }
-
-  const purchaseRef = db.collection('purchases').doc(`${uid}_${courseId}`);
-  const existing = await purchaseRef.get();
-  if (existing.exists && existing.data()?.status === 'completed') {
-    return { ok: true, alreadyPurchased: true, amountPaid: Number(existing.data()?.amountPaid || course.price || 0) };
-  }
-
-  // Current platform checkout is an application-level checkout. The authoritative
-  // entitlement is created server-side here. When a real payment gateway is
-  // connected, this branch should instead create a pending payment and let its
-  // verified webhook call completePurchaseEntitlement().
-  const amountPaid = Number(course.price || 0);
-  const paymentRef = db.collection('payments').doc();
-  const batch = db.batch();
-  batch.set(paymentRef, { uid, courseId, amount: amountPaid, status: 'completed', source: 'platform_checkout', createdAt: admin.firestore.FieldValue.serverTimestamp(), completedAt: admin.firestore.FieldValue.serverTimestamp() });
-  batch.set(purchaseRef, { uid, courseId, status: 'completed', amountPaid, paymentId: paymentRef.id, source: String(request.data?.source || 'web'), purchasedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-  await batch.commit();
-
-  await sendPurchaseNotification(uid, courseId, course);
-  return { ok: true, alreadyPurchased: false, paymentId: paymentRef.id, amountPaid };
 });
 
 /** Firebase-first purchase check with R2 disaster-recovery fallback. */
