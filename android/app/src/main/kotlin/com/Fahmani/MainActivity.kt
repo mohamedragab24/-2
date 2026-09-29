@@ -4,6 +4,9 @@ import android.os.Bundle
 import android.view.WindowManager
 import android.app.Activity
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.os.Build
 import android.app.Application
 import com.google.firebase.FirebaseApp
 import io.flutter.embedding.android.FlutterActivity
@@ -14,11 +17,13 @@ class MainActivity : FlutterActivity() {
 
     private val channelName = "masar_app/screen_protection"
     private val firebaseChannelName = "masar_app/firebase"
+    private val audioProtectionChannelName = "masar_app/audio_protection"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         enableScreenProtection()
+        blockAudioCapture()
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, state: Bundle?) { activity.window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE) }
             override fun onActivityStarted(activity: Activity) { activity.window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE) }
@@ -47,6 +52,13 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "diagnostics" -> result.success(pluginReport)
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, audioProtectionChannelName).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "disableMicrophoneCapture", "blockAudioCapture" -> result.success(blockAudioCapture())
                 else -> result.notImplemented()
             }
         }
@@ -168,6 +180,21 @@ class MainActivity : FlutterActivity() {
         return FirebaseApp.getApps(this).any {
             it.name == FirebaseApp.DEFAULT_APP_NAME
         }
+    }
+
+    /**
+     * Blocks recording of the app's own audio by other apps / system screen
+     * recorders (Android 10+). Combined with allowAudioPlaybackCapture="false"
+     * in the manifest. It cannot stop a physical microphone recording speakers.
+     */
+    private fun blockAudioCapture(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                am.setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE)
+            }
+            true
+        } catch (_: Throwable) { false }
     }
 
     private fun enableScreenProtection() {

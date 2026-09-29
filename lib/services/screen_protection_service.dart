@@ -4,6 +4,12 @@ import 'package:flutter/services.dart';
 class ScreenProtectionService {
   static const MethodChannel _channel =
       MethodChannel('masar_app/screen_protection');
+  static const MethodChannel _audioChannel =
+      MethodChannel('masar_app/audio_protection');
+
+  Future<void> _blockAudio() async {
+    try { await _audioChannel.invokeMethod('blockAudioCapture'); } catch (_) {}
+  }
 
   final StreamController<bool> _blockContentController =
       StreamController<bool>.broadcast();
@@ -13,6 +19,7 @@ class ScreenProtectionService {
   Future<void> init() async {
     try {
       await _channel.invokeMethod('enable');
+      await _blockAudio();
       _blockContentController.add(false);
     } catch (_) {
       _blockContentController.add(false);
@@ -30,6 +37,7 @@ class ScreenProtectionService {
   Future<void> enable() async {
     try {
       await _channel.invokeMethod('enable');
+      await _blockAudio();
       _blockContentController.add(false);
     } catch (_) {}
   }

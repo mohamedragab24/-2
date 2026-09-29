@@ -1,8 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:convert';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/course.dart';
 import '../models/lesson.dart';
 import '../models/user_profile.dart';
+import 'r2_worker_service.dart';
 
 class FirestoreService {
   FirebaseFirestore get _db => FirebaseFirestore.instance;
@@ -52,17 +56,37 @@ class FirestoreService {
     return courses;
   }
 
+  /// Firebase first -> Cloudflare R2 manifest -> last local copy.
+  /// Never fails just because the domain/deployment changed.
   Future<Course?> getCourse(String courseId) async {
-    final doc = await _db.collection('courses').doc(courseId).get();
-
-    if (!doc.exists || doc.data() == null) {
-      return null;
+    Map<String, dynamic>? raw;
+    try {
+      final doc = await _db.collection('courses').doc(courseId).get().timeout(const Duration(seconds: 8));
+      if (doc.exists && doc.data() != null) raw = Map<String, dynamic>.from(doc.data()!);
+    } catch (_) {}
+    raw ??= await R2WorkerService.getJson('courses/$courseId/manifest.json');
+    if (raw != null) {
+      final course = Course.fromMap(courseId, raw);
+      _cacheCourse(courseId, raw);
+      return course;
     }
+    final cached = await _readCachedCourse(courseId);
+    return cached == null ? null : Course.fromMap(courseId, cached);
+  }
 
-    return Course.fromMap(
-      doc.id,
-      doc.data()!,
-    );
+  Future<void> _cacheCourse(String id, Map<String, dynamic> raw) async {
+    try {
+      final safe = jsonDecode(jsonEncode(raw, toEncodable: (o) => o.toString())) as Map<String, dynamic>;
+      safe.remove('lessons');
+      (await SharedPreferences.getInstance()).setString('course_cache_$id', jsonEncode(safe));
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> _readCachedCourse(String id) async {
+    try {
+      final s = (await SharedPreferences.getInstance()).getString('course_cache_$id');
+      return s == null ? null : Map<String, dynamic>.from(jsonDecode(s) as Map);
+    } catch (_) { return null; }
   }
 
   Future<List<Course>> getCoursesByIds(List<String> ids) async {
@@ -93,28 +117,27 @@ class FirestoreService {
   }
 
   Future<List<Lesson>> getLessons(String courseId) async {
-    final snap = await _db.collection('courses').doc(courseId).collection('lessons').orderBy('order').get();
-    return snap.docs.map((d) => Lesson.fromMap(d.id, courseId, d.data())).toList();
+    try {
+      final snap = await _db.collection('courses').doc(courseId).collection('lessons').orderBy('order').get();
+      if (snap.docs.isNotEmpty) return snap.docs.map((d) => Lesson.fromMap(d.id, courseId, d.data())).toList();
+    } catch (_) {}
+    final fallback = await R2WorkerService.getJson('courses/$courseId/manifest.json');
+    final raw = fallback?['lessons'];
+    if (raw is List) {
+      return raw.whereType<Map>().map((m) => Lesson.fromMap((m['id'] ?? m['lessonId'] ?? '').toString(), courseId, Map<String, dynamic>.from(m))).where((l) => l.id.isNotEmpty).toList()..sort((a,b) => a.order.compareTo(b.order));
+    }
+    return [];
   }
 
   Stream<List<Lesson>> watchLessons(String courseId) {
-    return _db
-        .collection('courses')
-        .doc(courseId)
-        .collection('lessons')
-        .orderBy('order')
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map(
-                (doc) => Lesson.fromMap(
-                  doc.id,
-                  courseId,
-                  doc.data(),
-                ),
-              )
-              .toList(),
-        );
+    return _db.collection('courses').doc(courseId).collection('lessons').orderBy('order').snapshots().asyncMap((snapshot) async {
+      if (snapshot.docs.isNotEmpty) {
+        return snapshot.docs.map((doc) => Lesson.fromMap(doc.id, courseId, doc.data())).toList();
+      }
+      return getLessons(courseId);
+    }).handleError((_) async {
+      return await getLessons(courseId);
+    });
   }
 
   // ==================== USERS ====================
@@ -227,34 +250,55 @@ class FirestoreService {
     String uid,
     String courseId,
   ) async {
-    final doc = await _db
-        .collection('purchases')
-        .doc('${uid}_$courseId')
-        .get();
+    try {
+      final doc = await _db.collection('purchases').doc('${uid}_$courseId').get().timeout(const Duration(seconds: 8));
+      if (doc.exists && doc.data() != null && doc.data()!['status'] == 'completed') { _cachePurchase(uid, courseId, true); return true; }
 
-    if (!doc.exists || doc.data() == null) {
+      final legacy = await _db.collection('users').doc(uid).collection('purchases').doc(courseId).get();
+      if (legacy.exists && legacy.data() != null && legacy.data()!['status'] != 'cancelled' && legacy.data()!['status'] != 'refunded') { _cachePurchase(uid, courseId, true); return true; }
+      _cachePurchase(uid, courseId, false);
       return false;
+    } catch (_) {
+      // Firebase-first. If Firestore is temporarily unavailable, ask the
+      // server to perform the R2 disaster-recovery entitlement check.
+      try {
+        final result = await FirebaseFunctions.instanceFor(region: 'us-central1')
+            .httpsCallable('checkCourseAccess')
+            .call<Map<String, dynamic>>({'courseId': courseId});
+        final ok = result.data['purchased'] == true;
+        _cachePurchase(uid, courseId, ok);
+        return ok;
+      } catch (_) {
+        // Both Firebase and the R2 recovery were unreachable: use last known state.
+        try { return (await SharedPreferences.getInstance()).getBool('purchase_${uid}_$courseId') ?? false; } catch (_) { return false; }
+      }
     }
-
-    return doc.data()!['status'] == 'completed';
+  }
+  Future<void> _cachePurchase(String uid, String courseId, bool v) async {
+    try { (await SharedPreferences.getInstance()).setBool('purchase_${uid}_$courseId', v); } catch (_) {}
   }
 
   Stream<List<String>> watchMyCourseIds(String uid) {
-    return _db
-        .collection('purchases')
-        .where('uid', isEqualTo: uid)
-        .where('status', isEqualTo: 'completed')
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map(
-                (doc) => (doc.data()['courseId'] ?? '').toString(),
-              )
-              .where(
-                (courseId) => courseId.isNotEmpty,
-              )
-              .toList(),
-        );
+    return _db.collection('purchases').where('uid', isEqualTo: uid).where('status', isEqualTo: 'completed').snapshots().asyncMap((snapshot) async {
+      final ids = snapshot.docs.map((doc) => (doc.data()['courseId'] ?? '').toString()).where((id) => id.isNotEmpty).toSet();
+      try {
+        final legacy = await _db.collection('users').doc(uid).collection('purchases').get();
+        for (final doc in legacy.docs) {
+          final data = doc.data();
+          if (data['status'] != 'cancelled' && data['status'] != 'refunded') ids.add((data['courseId'] ?? doc.id).toString());
+        }
+      } catch (_) {}
+      if (ids.isNotEmpty) return ids.where((id) => id.isNotEmpty).toList();
+      try {
+        final result = await FirebaseFunctions.instanceFor(region: 'us-central1').httpsCallable('getMyPurchasedCourseIds').call<Map<String,dynamic>>();
+        return (result.data['courseIds'] as List? ?? const []).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+      } catch (_) { return ids.where((id) => id.isNotEmpty).toList(); }
+    }).handleError((_) async {
+      try {
+        final result = await FirebaseFunctions.instanceFor(region: 'us-central1').httpsCallable('getMyPurchasedCourseIds').call<Map<String,dynamic>>();
+        return (result.data['courseIds'] as List? ?? const []).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+      } catch (_) { return <String>[]; }
+    });
   }
 
   // ==================== FAVORITES ====================

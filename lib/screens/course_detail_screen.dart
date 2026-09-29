@@ -32,9 +32,27 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       body: FutureBuilder<Course?>(
         future: firestore.getCourse(widget.courseId),
         builder: (context, courseSnap) {
-          if (!courseSnap.hasData) return const Center(child: CircularProgressIndicator());
+          if (courseSnap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
           final course = courseSnap.data;
-          if (course == null) return const Center(child: Text('الكورس غير موجود'));
+          if (course == null) {
+            return SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.cloud_off_outlined, size: 44, color: AppColors.muted),
+                    const SizedBox(height: 12),
+                    const Text('تعذر تحميل بيانات الكورس الآن', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    const Text('تحقق من الاتصال ثم أعد المحاولة. بياناتك ومشترياتك محفوظة.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: 12.5)),
+                    const SizedBox(height: 14),
+                    FilledButton(onPressed: () => setState(() {}), child: const Text('إعادة المحاولة')),
+                    TextButton(onPressed: () => context.go('/'), child: const Text('الرئيسية')),
+                  ]),
+                ),
+              ),
+            );
+          }
 
           return FutureBuilder<bool>(
             future: uid == null ? Future.value(false) : firestore.hasPurchased(uid, widget.courseId),
@@ -68,7 +86,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                         children: [
                           Text(course.title, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 21)),
                           const SizedBox(height: 8),
-                          Text('المدرب: ${course.instructorName}', style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+                          Text('المفهّم: ${course.instructorName.isEmpty ? 'مفهّم' : course.instructorName}', style: const TextStyle(color: AppColors.muted, fontSize: 13)),
                           const SizedBox(height: 14),
                           Row(children: [
                             const Icon(Icons.star, color: AppColors.gold, size: 15),
