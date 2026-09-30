@@ -688,3 +688,7 @@ exports.backfillCourseManifests = onCall({ secrets: R2_SECRETS, timeoutSeconds: 
   }
   return { ok: true, count };
 });
+
+
+// المجموعات
+Object.assign(exports, require('./groups'));

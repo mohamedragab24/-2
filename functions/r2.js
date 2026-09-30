@@ -98,4 +98,26 @@ async function putObject(key, buffer, contentType="application/octet-stream") {
   if (!res.ok) throw new Error(`R2 upload failed: ${res.status} ${await res.text()}`);
 }
 
-module.exports = { presignedUrl, putObject, getConfig };
+async function deleteObject(key) {
+  const { accountId, accessKeyId, secretAccessKey, bucket } = getConfig();
+  const host = `${accountId}.r2.cloudflarestorage.com`;
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const dateStamp = amzDate.slice(0, 8);
+  const region = "auto", service = "s3";
+  const payloadHash = sha256Hex("");
+  const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+  const canonical = ["DELETE", canonicalUri(bucket, key), "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+  const scope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${scope}\n${sha256Hex(canonical)}`;
+  const signature = hmac(signingKey(secretAccessKey, dateStamp, region, service), stringToSign).toString("hex");
+  const auth = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const res = await fetch(`${endpoint(accountId)}${canonicalUri(bucket, key)}`, {
+    method: "DELETE",
+    headers: { Host: host, "x-amz-content-sha256": payloadHash, "x-amz-date": amzDate, Authorization: auth },
+  });
+  if (!res.ok && res.status !== 404) throw new Error(`R2 delete failed: ${res.status}`);
+}
+
+module.exports = { presignedUrl, putObject, deleteObject, getConfig };
